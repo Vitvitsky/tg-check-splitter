@@ -1,4 +1,14 @@
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, KeyboardButton, ReplyKeyboardMarkup
+
+MAIN_MENU_BTN = "📸 Разделить чек"
+
+
+def main_menu_kb() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[[KeyboardButton(text=MAIN_MENU_BTN)]],
+        resize_keyboard=True,
+        persistent=True,
+    )
 
 
 def photo_collected_kb() -> InlineKeyboardMarkup:

@@ -1,10 +1,11 @@
-from aiogram import Bot, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.handlers.voting import send_voting_keyboard_to_user
+from bot.keyboards.check import MAIN_MENU_BTN, main_menu_kb
 from bot.services.session import SessionService
 
 router = Router()
@@ -41,5 +42,12 @@ async def cmd_start(message: Message):
     """Handle plain /start."""
     await message.answer(
         "Привет! Я помогу разделить счёт.\n\n"
-        "Отправьте фото чека, чтобы начать."
+        "Отправьте фото чека, чтобы начать.",
+        reply_markup=main_menu_kb(),
     )
+
+
+@router.message(F.text == MAIN_MENU_BTN)
+async def main_menu_btn(message: Message):
+    """Handle main menu button press."""
+    await message.answer("Отправьте фото чека, чтобы начать.")
