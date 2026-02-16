@@ -57,7 +57,9 @@ class SessionService:
         await self._db.refresh(member)
         return member
 
-    async def add_photo(self, session_id: UUID, tg_file_id: str) -> SessionPhoto:
+    async def add_photo(self, session_id: UUID | str, tg_file_id: str) -> SessionPhoto:
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
         photo = SessionPhoto(session_id=session_id, tg_file_id=tg_file_id)
         self._db.add(photo)
         await self._db.commit()
@@ -65,8 +67,10 @@ class SessionService:
         return photo
 
     async def save_ocr_items(
-        self, session_id: UUID, items_data: list[dict]
+        self, session_id: UUID | str, items_data: list[dict]
     ) -> list[SessionItem]:
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
         items = []
         for data in items_data:
             item = SessionItem(
