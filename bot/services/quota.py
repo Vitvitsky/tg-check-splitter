@@ -1,0 +1,48 @@
+from datetime import datetime, timezone
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from bot.models.user_quota import UserQuota
+
+
+def _next_month_start() -> datetime:
+    now = datetime.now(timezone.utc)
+    if now.month == 12:
+        return now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+    return now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
+
+
+class QuotaService:
+    def __init__(self, db: AsyncSession, free_limit: int):
+        self._db = db
+        self._free_limit = free_limit
+
+    async def _get_or_create(self, user_tg_id: int) -> UserQuota:
+        quota = await self._db.get(UserQuota, user_tg_id)
+        if quota is None:
+            quota = UserQuota(
+                user_tg_id=user_tg_id,
+                free_scans_used=0,
+                quota_reset_at=_next_month_start(),
+            )
+            self._db.add(quota)
+            await self._db.commit()
+            await self._db.refresh(quota)
+        return quota
+
+    async def can_scan_free(self, user_tg_id: int) -> bool:
+        quota = await self._get_or_create(user_tg_id)
+        now = datetime.now(timezone.utc)
+        reset_at = quota.quota_reset_at
+        if reset_at.tzinfo is None:
+            reset_at = reset_at.replace(tzinfo=timezone.utc)
+        if now >= reset_at:
+            quota.free_scans_used = 0
+            quota.quota_reset_at = _next_month_start()
+            await self._db.commit()
+        return quota.free_scans_used < self._free_limit
+
+    async def use_free_scan(self, user_tg_id: int) -> None:
+        quota = await self._get_or_create(user_tg_id)
+        quota.free_scans_used += 1
+        await self._db.commit()

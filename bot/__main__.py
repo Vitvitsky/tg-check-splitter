@@ -4,7 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from bot.config import get_settings
-from bot.handlers import admin, check, start, voting
+from bot.handlers import admin, check, payment, start, voting
 from bot.middlewares import DbSessionMiddleware
 
 logging.basicConfig(level=logging.INFO)
@@ -21,7 +21,7 @@ async def main():
     dp.include_router(check.router)
     dp.include_router(voting.router)
     dp.include_router(admin.router)
-    # Handlers for payment will be added in later tasks
+    dp.include_router(payment.router)
 
     await dp.start_polling(bot)
 

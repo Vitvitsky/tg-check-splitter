@@ -52,6 +52,23 @@ async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
     data = await state.get_data()
     session_id = data["session_id"]
 
+    # Quota check
+    settings = get_settings()
+    quota_svc = QuotaService(db, settings.free_scans_per_month)
+    if not await quota_svc.can_scan_free(callback.from_user.id):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(
+                text=f"Оплатить {settings.scan_price_stars} Stars",
+                callback_data="pay_stars",
+            )]
+        ])
+        await callback.message.edit_text(
+            f"Бесплатный лимит исчерпан ({settings.free_scans_per_month}/мес).",
+            reply_markup=kb,
+        )
+        return
+    await quota_svc.use_free_scan(callback.from_user.id)
+
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
 
