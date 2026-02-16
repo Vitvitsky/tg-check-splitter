@@ -10,14 +10,17 @@ def svc(db_session):
 
 
 async def test_create_session(svc, db_session):
-    session = await svc.create_session(admin_tg_id=111)
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
     assert session.admin_tg_id == 111
     assert session.status == "created"
     assert len(session.invite_code) == 8
+    assert len(session.members) == 1
+    assert session.members[0].user_tg_id == 111
+    assert session.members[0].display_name == "Admin"
 
 
 async def test_join_session(svc, db_session):
-    session = await svc.create_session(admin_tg_id=111)
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
     member = await svc.join_session(session.invite_code, user_tg_id=222, display_name="Bob")
     assert member.user_tg_id == 222
     assert member.session_id == session.id
@@ -29,20 +32,20 @@ async def test_join_session_invalid_code(svc):
 
 
 async def test_join_session_duplicate(svc, db_session):
-    session = await svc.create_session(admin_tg_id=111)
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
     await svc.join_session(session.invite_code, user_tg_id=222, display_name="Bob")
     dup = await svc.join_session(session.invite_code, user_tg_id=222, display_name="Bob")
     assert dup is None  # already joined
 
 
 async def test_add_photo(svc, db_session):
-    session = await svc.create_session(admin_tg_id=111)
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
     photo = await svc.add_photo(session.id, tg_file_id="AgACAgIAA...")
     assert photo.tg_file_id == "AgACAgIAA..."
 
 
 async def test_save_ocr_items(svc, db_session):
-    session = await svc.create_session(admin_tg_id=111)
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
     items_data = [
         {"name": "Pizza", "price": 650, "quantity": 1},
         {"name": "Soup", "price": 450, "quantity": 2},
@@ -51,27 +54,31 @@ async def test_save_ocr_items(svc, db_session):
     assert len(items) == 2
 
 
-async def test_toggle_vote(svc, db_session):
-    session = await svc.create_session(admin_tg_id=111)
-    items = await svc.save_ocr_items(session.id, [{"name": "Pizza", "price": 650, "quantity": 1}])
+async def test_cycle_vote(svc, db_session):
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
+    items = await svc.save_ocr_items(session.id, [{"name": "Pizza", "price": 650, "quantity": 2}])
     item_id = items[0].id
 
-    # Vote on
-    voted = await svc.toggle_vote(item_id, user_tg_id=222)
-    assert voted is True
+    # 0 → 1
+    qty = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
+    assert qty == 1
 
-    # Vote off
-    voted = await svc.toggle_vote(item_id, user_tg_id=222)
-    assert voted is False
+    # 1 → 2
+    qty = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
+    assert qty == 2
+
+    # 2 → 0 (removed)
+    qty = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
+    assert qty == 0
 
 
 async def test_get_unvoted_items(svc, db_session):
-    session = await svc.create_session(admin_tg_id=111)
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
     items = await svc.save_ocr_items(session.id, [
         {"name": "Pizza", "price": 650, "quantity": 1},
         {"name": "Soup", "price": 450, "quantity": 1},
     ])
-    await svc.toggle_vote(items[0].id, user_tg_id=222)
+    await svc.cycle_vote(items[0].id, user_tg_id=222, max_qty=1)
 
     unvoted = await svc.get_unvoted_items(session.id)
     assert len(unvoted) == 1

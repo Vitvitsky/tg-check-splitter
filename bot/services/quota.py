@@ -46,3 +46,31 @@ class QuotaService:
         quota = await self._get_or_create(user_tg_id)
         quota.free_scans_used += 1
         await self._db.commit()
+
+    async def grant_paid_scan(self, user_tg_id: int) -> None:
+        quota = await self._get_or_create(user_tg_id)
+        quota.paid_scans += 1
+        await self._db.commit()
+
+    async def use_paid_scan(self, user_tg_id: int) -> bool:
+        """Try to use a paid scan. Returns True if successful."""
+        quota = await self._get_or_create(user_tg_id)
+        if quota.paid_scans > 0:
+            quota.paid_scans -= 1
+            await self._db.commit()
+            return True
+        return False
+
+    async def can_scan(self, user_tg_id: int) -> bool:
+        """Check if user can scan (free or paid)."""
+        if await self.can_scan_free(user_tg_id):
+            return True
+        quota = await self._get_or_create(user_tg_id)
+        return quota.paid_scans > 0
+
+    async def use_scan(self, user_tg_id: int) -> bool:
+        """Use a scan — free first, then paid. Returns True if successful."""
+        if await self.can_scan_free(user_tg_id):
+            await self.use_free_scan(user_tg_id)
+            return True
+        return await self.use_paid_scan(user_tg_id)

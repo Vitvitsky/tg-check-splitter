@@ -21,14 +21,23 @@ class CheckStates(StatesGroup):
 
 @router.message(F.photo)
 async def handle_photo(message: Message, state: FSMContext, db: AsyncSession):
-    """Receive check photo(s)."""
+    """Receive check photo(s). Only admin (creator) or new users can send photos."""
     svc = SessionService(db)
 
     data = await state.get_data()
     session_id = data.get("session_id")
 
-    if not session_id:
-        session = await svc.create_session(admin_tg_id=message.from_user.id)
+    if session_id:
+        # If user already has a session, check they are the admin
+        session = await svc.get_session_by_id(session_id)
+        if session and session.admin_tg_id != message.from_user.id:
+            await message.answer("Вы участник сессии. Ожидайте голосования.")
+            return
+    else:
+        session = await svc.create_session(
+            admin_tg_id=message.from_user.id,
+            admin_display_name=message.from_user.full_name,
+        )
         session_id = str(session.id)
         await state.update_data(session_id=session_id)
 
@@ -52,10 +61,10 @@ async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
     data = await state.get_data()
     session_id = data["session_id"]
 
-    # Quota check
+    # Quota check (free or paid)
     settings = get_settings()
     quota_svc = QuotaService(db, settings.free_scans_per_month)
-    if not await quota_svc.can_scan_free(callback.from_user.id):
+    if not await quota_svc.can_scan(callback.from_user.id):
         kb = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(
                 text=f"Оплатить {settings.scan_price_stars} Stars",
@@ -67,7 +76,7 @@ async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
             reply_markup=kb,
         )
         return
-    await quota_svc.use_free_scan(callback.from_user.id)
+    await quota_svc.use_scan(callback.from_user.id)
 
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
@@ -84,7 +93,14 @@ async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
     # Run OCR
     settings = get_settings()
     ocr = OcrService(api_key=settings.openrouter_api_key, model=settings.openrouter_model)
-    result = await ocr.parse_receipt(photos_bytes)
+    try:
+        result = await ocr.parse_receipt(photos_bytes)
+    except Exception as e:
+        await callback.message.edit_text(
+            f"❌ Ошибка распознавания: {e}\n\nПопробуйте переотправить фото.",
+            reply_markup=photo_collected_kb(),
+        )
+        return
 
     # Save items
     await svc.save_ocr_items(
@@ -92,7 +108,7 @@ async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
         [{"name": i.name, "price": i.price, "quantity": i.quantity} for i in result.items],
     )
 
-    await svc.update_status(session_id, "voting")
+    await svc.update_status(session_id, "ocr_done")
 
     # Format result
     lines = ["📋 Распознанные позиции:\n"]
@@ -115,9 +131,18 @@ async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
 
 
 @router.callback_query(F.data == "ocr_retry")
-async def retry_ocr(callback: CallbackQuery, state: FSMContext):
-    """Reset to photo collection."""
+async def retry_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    """Reset to photo collection — clear old photos and items."""
     await callback.answer()
+    data = await state.get_data()
+    session_id = data.get("session_id")
+
+    if session_id:
+        svc = SessionService(db)
+        await svc.clear_items(session_id)
+        await svc.clear_photos(session_id)
+        await svc.update_status(session_id, "created")
+
     await state.update_data(photo_count=0)
     await state.set_state(CheckStates.collecting_photos)
     await callback.message.edit_text("Отправьте фото чека заново.")
@@ -202,13 +227,28 @@ async def handle_edit_item(message: Message, state: FSMContext, db: AsyncSession
     editing_item_id = data.get("editing_item_id")
 
     if editing_item_id is None:
-        # Adding new item
         await svc.save_ocr_items(session_id, [{"name": name, "price": price, "quantity": 1}])
         await message.answer(f"✅ Добавлено: {name} — {price}₽")
     else:
-        # Editing existing item
         item_id = UUID(editing_item_id)
         await svc.update_item(item_id, name=name, price=price)
         await message.answer(f"✅ Обновлено: {name} — {price}₽")
 
     await state.set_state(CheckStates.reviewing_ocr)
+
+    # Show edit list keyboard so user can continue editing or confirm
+    session = await svc.get_session_by_id(session_id)
+    buttons = []
+    for item in session.items:
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{item.name} — {item.price}₽",
+                callback_data=f"edit_item:{item.id}",
+            ),
+            InlineKeyboardButton(text="🗑", callback_data=f"del_item:{item.id}"),
+        ])
+    buttons.append([InlineKeyboardButton(text="➕ Добавить позицию", callback_data="add_item")])
+    buttons.append([InlineKeyboardButton(text="✅ Готово", callback_data="ocr_confirm")])
+
+    kb = InlineKeyboardMarkup(inline_keyboard=buttons)
+    await message.answer("Редактирование позиций:", reply_markup=kb)

@@ -1,9 +1,13 @@
 import base64
 import json
+import logging
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
 
@@ -55,12 +59,13 @@ class OcrService:
                 "image_url": {"url": f"data:image/jpeg;base64,{b64}"},
             })
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
                 OPENROUTER_URL,
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 json={
                     "model": self._model,
+                    "max_tokens": 2048,
                     "messages": [
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": content},
@@ -69,11 +74,28 @@ class OcrService:
             )
             response.raise_for_status()
 
-        raw = response.json()["choices"][0]["message"]["content"]
+        body = response.json()
+        raw = body["choices"][0]["message"]["content"]
+        logger.info("OCR raw response: %s", raw[:500] if raw else "<empty>")
+
+        if not raw or not raw.strip():
+            raise ValueError(f"LLM returned empty content. Full response: {json.dumps(body)[:300]}")
+
         raw = raw.strip()
+        # Strip special tokens from some models (e.g. glm: <|begin_of_box|>...<|end_of_box|>)
+        raw = re.sub(r"<\|[a-z_]+\|>", "", raw).strip()
+        # Strip markdown code fences
         if raw.startswith("```"):
-            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0]
-        data = json.loads(raw)
+            raw = raw.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+        # Extract JSON object even if surrounded by text
+        match = re.search(r"\{[\s\S]*\}", raw)
+        if match:
+            raw = match.group(0)
+
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            raise ValueError(f"LLM returned invalid JSON: {raw[:300]}")
 
         items = [
             OcrItem(

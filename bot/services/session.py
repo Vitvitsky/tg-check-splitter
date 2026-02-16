@@ -12,12 +12,20 @@ class SessionService:
     def __init__(self, db: AsyncSession):
         self._db = db
 
-    async def create_session(self, admin_tg_id: int) -> Session:
+    async def create_session(self, admin_tg_id: int, admin_display_name: str) -> Session:
         session = Session(
             admin_tg_id=admin_tg_id,
             invite_code=secrets.token_urlsafe(6)[:8],
         )
         self._db.add(session)
+        await self._db.flush()
+
+        member = SessionMember(
+            session_id=session.id,
+            user_tg_id=admin_tg_id,
+            display_name=admin_display_name,
+        )
+        self._db.add(member)
         await self._db.commit()
         await self._db.refresh(session)
         return session
@@ -86,8 +94,8 @@ class SessionService:
             await self._db.refresh(item)
         return items
 
-    async def toggle_vote(self, item_id: UUID, user_tg_id: int) -> bool:
-        """Returns True if vote added, False if removed."""
+    async def cycle_vote(self, item_id: UUID, user_tg_id: int, max_qty: int) -> int:
+        """Cycle vote quantity: 0 → 1 → 2 → ... → max_qty → 0. Returns new quantity."""
         existing = await self._db.execute(
             select(ItemVote).where(
                 ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id
@@ -95,32 +103,60 @@ class SessionService:
         )
         vote = existing.scalar_one_or_none()
         if vote:
-            await self._db.delete(vote)
+            if vote.quantity >= max_qty:
+                await self._db.delete(vote)
+                await self._db.commit()
+                return 0
+            vote.quantity += 1
             await self._db.commit()
-            return False
-        new_vote = ItemVote(item_id=item_id, user_tg_id=user_tg_id)
+            return vote.quantity
+        new_vote = ItemVote(item_id=item_id, user_tg_id=user_tg_id, quantity=1)
         self._db.add(new_vote)
         await self._db.commit()
-        return True
+        return 1
 
-    async def get_unvoted_items(self, session_id: UUID) -> list[SessionItem]:
-        result = await self._db.execute(
-            select(SessionItem)
-            .where(SessionItem.session_id == session_id)
-            .outerjoin(ItemVote)
-            .where(ItemVote.id.is_(None))
+    async def add_vote_all(self, item_id: UUID, user_tg_id: int, qty: int) -> None:
+        """Add a vote with specific quantity (for split-equal)."""
+        existing = await self._db.execute(
+            select(ItemVote).where(
+                ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id
+            )
         )
-        return list(result.scalars().all())
+        vote = existing.scalar_one_or_none()
+        if vote:
+            vote.quantity = qty
+        else:
+            self._db.add(ItemVote(item_id=item_id, user_tg_id=user_tg_id, quantity=qty))
+        await self._db.commit()
 
-    async def get_user_votes(self, session_id: UUID | str, user_tg_id: int) -> set[UUID]:
+    async def get_unvoted_items(self, session_id: UUID | str) -> list[SessionItem]:
+        """Items where total claimed < item quantity."""
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        # Fresh query to avoid stale relationship cache
+        result = await self._db.execute(
+            select(SessionItem).where(SessionItem.session_id == session_id)
+        )
+        items = list(result.scalars().all())
+        unvoted = []
+        for item in items:
+            # Refresh votes relationship
+            await self._db.refresh(item, ["votes"])
+            total_claimed = sum(v.quantity for v in item.votes)
+            if total_claimed < item.quantity:
+                unvoted.append(item)
+        return unvoted
+
+    async def get_user_votes(self, session_id: UUID | str, user_tg_id: int) -> dict[UUID, int]:
+        """Returns {item_id: claimed_quantity}."""
         if isinstance(session_id, str):
             session_id = UUID(session_id)
         result = await self._db.execute(
-            select(ItemVote.item_id)
+            select(ItemVote.item_id, ItemVote.quantity)
             .join(SessionItem)
             .where(SessionItem.session_id == session_id, ItemVote.user_tg_id == user_tg_id)
         )
-        return set(result.scalars().all())
+        return {row.item_id: row.quantity for row in result.all()}
 
     async def update_status(self, session_id: UUID | str, status: str) -> None:
         if isinstance(session_id, str):
@@ -148,3 +184,61 @@ class SessionService:
         for item in unvoted:
             await self._db.delete(item)
         await self._db.commit()
+
+    async def clear_photos(self, session_id: UUID | str) -> None:
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        result = await self._db.execute(
+            select(SessionPhoto).where(SessionPhoto.session_id == session_id)
+        )
+        for photo in result.scalars().all():
+            await self._db.delete(photo)
+        await self._db.commit()
+
+    async def clear_items(self, session_id: UUID | str) -> None:
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        result = await self._db.execute(
+            select(SessionItem).where(SessionItem.session_id == session_id)
+        )
+        for item in result.scalars().all():
+            await self._db.delete(item)
+        await self._db.commit()
+
+    async def get_members(self, session_id: UUID | str) -> list[SessionMember]:
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        result = await self._db.execute(
+            select(SessionMember).where(SessionMember.session_id == session_id)
+        )
+        return list(result.scalars().all())
+
+    async def get_member(self, session_id: UUID | str, user_tg_id: int) -> SessionMember | None:
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        result = await self._db.execute(
+            select(SessionMember).where(
+                SessionMember.session_id == session_id,
+                SessionMember.user_tg_id == user_tg_id,
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def set_member_tip(self, session_id: UUID | str, user_tg_id: int, tip_percent: int) -> None:
+        member = await self.get_member(session_id, user_tg_id)
+        if member:
+            member.tip_percent = tip_percent
+            await self._db.commit()
+
+    async def confirm_member(self, session_id: UUID | str, user_tg_id: int) -> None:
+        member = await self.get_member(session_id, user_tg_id)
+        if member:
+            member.confirmed = True
+            await self._db.commit()
+
+    async def unconfirm_member(self, session_id: UUID | str, user_tg_id: int) -> None:
+        member = await self.get_member(session_id, user_tg_id)
+        if member:
+            member.confirmed = False
+            member.tip_percent = None
+            await self._db.commit()
