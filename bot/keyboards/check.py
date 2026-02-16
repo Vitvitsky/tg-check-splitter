@@ -1,0 +1,17 @@
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+
+def photo_collected_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📸 Распознать", callback_data="ocr_start")],
+    ])
+
+
+def ocr_result_kb() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="✅ Всё верно", callback_data="ocr_confirm"),
+            InlineKeyboardButton(text="✏️ Редактировать", callback_data="ocr_edit"),
+        ],
+        [InlineKeyboardButton(text="🔄 Переотправить", callback_data="ocr_retry")],
+    ])
