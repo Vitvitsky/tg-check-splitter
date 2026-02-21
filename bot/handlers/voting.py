@@ -4,8 +4,10 @@ from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message
+from aiogram.utils.i18n import gettext as _
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.i18n import get_translator
 from bot.keyboards.voting import items_page_kb, participant_summary_kb, participant_tip_kb
 from bot.services.calculator import calculate_user_share
 from bot.services.session import SessionService
@@ -17,7 +19,13 @@ class VotingStates(StatesGroup):
     custom_tip = State()
 
 
-async def _build_voting_keyboard(db: AsyncSession, session_id: str, user_tg_id: int, page: int = 0):
+async def _build_voting_keyboard(
+    db: AsyncSession,
+    session_id: str,
+    user_tg_id: int,
+    page: int = 0,
+    locale: str | None = None,
+):
     """Build voting keyboard markup and return (text, kb)."""
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
@@ -34,8 +42,10 @@ async def _build_voting_keyboard(db: AsyncSession, session_id: str, user_tg_id: 
         for item in session.items
     ]
 
-    kb = items_page_kb(items_data, user_votes, page=page)
-    return "Отметьте свои блюда:", kb
+    curr = getattr(session, "currency", "RUB") or "RUB"
+    t = get_translator(locale)
+    kb = items_page_kb(items_data, user_votes, t, page=page, currency=curr)
+    return t("Mark your dishes"), kb
 
 
 async def _send_voting_keyboard(
@@ -46,17 +56,30 @@ async def _send_voting_keyboard(
 
 
 async def send_voting_keyboard_to_user(
-    bot: Bot, db: AsyncSession, user_tg_id: int, session_id: str, page: int = 0
+    bot: Bot,
+    db: AsyncSession,
+    user_tg_id: int,
+    session_id: str,
+    page: int = 0,
+    locale: str | None = None,
 ):
     """Send voting keyboard as a new message to a user (not via callback edit)."""
-    text, kb = await _build_voting_keyboard(db, session_id, user_tg_id, page)
+    text, kb = await _build_voting_keyboard(db, session_id, user_tg_id, page, locale)
     await bot.send_message(user_tg_id, text, reply_markup=kb)
 
 
-async def _build_summary_text(db: AsyncSession, session_id: str, user_tg_id: int, tip_percent: int) -> str:
+async def _build_summary_text(
+    db: AsyncSession, session_id: str, user_tg_id: int, tip_percent: int
+) -> str:
     """Build personal summary text for a participant."""
+    from decimal import Decimal
+
+    from bot.utils import format_price
+
+    t = get_translator(None)
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
+    curr = getattr(session, "currency", "RUB") or "RUB"
     user_votes = await svc.get_user_votes(session_id, user_tg_id)
 
     items_data = [
@@ -70,21 +93,23 @@ async def _build_summary_text(db: AsyncSession, session_id: str, user_tg_id: int
 
     dishes_total, tip_amount, grand_total = calculate_user_share(items_data, user_tg_id, tip_percent)
 
-    from decimal import Decimal
-    lines = ["🧾 Ваши блюда:\n"]
+    lines = [t("Your dishes") + "\n"]
     for item in session.items:
         my_qty = user_votes.get(item.id, 0)
         if my_qty:
             per_unit = item.price / Decimal(item.quantity) if item.quantity else item.price
             cost = per_unit * my_qty
             if item.quantity > 1:
-                lines.append(f"  {item.name} ×{my_qty} — {int(cost)}₽ (из {item.price}₽ за {item.quantity} шт)")
+                lines.append(
+                    f"  {item.name} ×{my_qty} — {format_price(cost, curr)} "
+                    f"({format_price(item.price, curr)} за {item.quantity} шт)"
+                )
             else:
-                lines.append(f"  {item.name} — {int(item.price)}₽")
+                lines.append(f"  {item.name} — {format_price(item.price, curr)}")
 
-    lines.append(f"\nСумма блюд: {int(dishes_total)}₽")
-    lines.append(f"Чаевые {tip_percent}%: {int(tip_amount)}₽")
-    lines.append(f"\n💰 Итого: {int(grand_total)}₽")
+    lines.append("\n" + t("Dishes sum").format(amount=format_price(dishes_total, curr)))
+    lines.append(t("Tip percent amount").format(percent=tip_percent, amount=format_price(tip_amount, curr)))
+    lines.append("\n" + t("Grand total").format(amount=format_price(grand_total, curr)))
 
     return "\n".join(lines)
 
@@ -93,21 +118,21 @@ async def _build_summary_text(db: AsyncSession, session_id: str, user_tg_id: int
 
 @router.callback_query(F.data.startswith("vote:"))
 async def handle_vote(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
-    await callback.answer()
     item_id = UUID(callback.data.split(":")[1])
     data = await state.get_data()
     session_id = data.get("session_id")
     page = data.get("vote_page", 0)
 
     svc = SessionService(db)
-    # Get item to know max quantity
     from bot.models.session import SessionItem
     item = await db.get(SessionItem, item_id)
     max_qty = item.quantity if item else 1
-    await svc.cycle_vote(item_id, callback.from_user.id, max_qty)
-    # Reset confirmation since dishes changed
+    _, overflow = await svc.cycle_vote(item_id, callback.from_user.id, max_qty)
+    if overflow:
+        await callback.answer(_("Item fully claimed"), show_alert=True)
+        return
+    await callback.answer()
     await svc.unconfirm_member(session_id, callback.from_user.id)
-
     await _send_voting_keyboard(callback, db, session_id, callback.from_user.id, page)
 
 
@@ -133,12 +158,12 @@ async def handle_vote_done(callback: CallbackQuery, state: FSMContext, db: Async
     svc = SessionService(db)
     user_votes = await svc.get_user_votes(session_id, callback.from_user.id)
     if not user_votes:
-        await callback.answer("Выберите хотя бы одно блюдо!", show_alert=True)
+        await callback.answer(_("Select one dish"), show_alert=True)
         return
 
     await callback.message.edit_text(
-        "Выберите процент чаевых:",
-        reply_markup=participant_tip_kb(),
+        _("Select tip percent"),
+        reply_markup=participant_tip_kb(_),
     )
 
 
@@ -159,7 +184,7 @@ async def handle_participant_tip(callback: CallbackQuery, state: FSMContext, db:
 
     if tip_value == "custom":
         await callback.answer()
-        await callback.message.edit_text("Введите процент чаевых (число):")
+        await callback.message.edit_text(_("Enter tip number"))
         await state.set_state(VotingStates.custom_tip)
         return
 
@@ -174,7 +199,7 @@ async def handle_participant_tip(callback: CallbackQuery, state: FSMContext, db:
     await svc.set_member_tip(session_id, callback.from_user.id, tip_percent)
 
     text = await _build_summary_text(db, session_id, callback.from_user.id, tip_percent)
-    await callback.message.edit_text(text, reply_markup=participant_summary_kb())
+    await callback.message.edit_text(text, reply_markup=participant_summary_kb(_))
 
 
 @router.message(VotingStates.custom_tip)
@@ -182,7 +207,7 @@ async def handle_custom_tip_input(message: Message, state: FSMContext, db: Async
     try:
         tip_percent = int(message.text.strip().replace("%", ""))
     except ValueError:
-        await message.answer("Введите число (например: 12).")
+        await message.answer(_("Enter number example"))
         return
 
     await state.update_data(my_tip=tip_percent)
@@ -195,21 +220,21 @@ async def handle_custom_tip_input(message: Message, state: FSMContext, db: Async
     await svc.set_member_tip(session_id, message.from_user.id, tip_percent)
 
     text = await _build_summary_text(db, session_id, message.from_user.id, tip_percent)
-    await message.answer(text, reply_markup=participant_summary_kb())
+    await message.answer(text, reply_markup=participant_summary_kb(_))
 
 
 # --- Summary actions ---
 
 @router.callback_query(F.data == "pconfirm")
 async def handle_participant_confirm(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
-    await callback.answer("Подтверждено!")
+    await callback.answer(_("Confirmed"))
     data = await state.get_data()
     session_id = data["session_id"]
 
     svc = SessionService(db)
     await svc.confirm_member(session_id, callback.from_user.id)
 
-    await callback.message.edit_text("✅ Ваш выбор подтверждён. Ожидайте итогов от админа.")
+    await callback.message.edit_text(_("Choice confirmed"))
 
     # Notify admin
     session = await svc.get_session_by_id(session_id)
@@ -220,7 +245,9 @@ async def handle_participant_confirm(callback: CallbackQuery, state: FSMContext,
     bot: Bot = callback.bot
     await bot.send_message(
         session.admin_tg_id,
-        f"✅ {member.display_name} подтвердил(а) выбор ({confirmed_count}/{total_count})",
+        _("Member confirmed").format(
+            name=member.display_name, count=confirmed_count, total=total_count
+        ),
     )
 
 
@@ -239,8 +266,8 @@ async def handle_change_tip(callback: CallbackQuery, state: FSMContext):
     """Go back to tip selection."""
     await callback.answer()
     await callback.message.edit_text(
-        "Выберите процент чаевых:",
-        reply_markup=participant_tip_kb(),
+        _("Select tip percent"),
+        reply_markup=participant_tip_kb(_),
     )
 
 
@@ -256,6 +283,6 @@ async def handle_missing_item(callback: CallbackQuery, state: FSMContext, db: As
     bot: Bot = callback.bot
     await bot.send_message(
         session.admin_tg_id,
-        f"⚠️ {callback.from_user.full_name} не нашёл своё блюдо в списке!",
+        _("Member missing dish").format(name=callback.from_user.full_name),
     )
-    await callback.message.answer("Админ получил уведомление.")
+    await callback.message.answer(_("Admin notified"))

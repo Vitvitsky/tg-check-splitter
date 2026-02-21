@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from uuid import UUID
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
@@ -6,14 +7,17 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 def items_page_kb(
     items: list[dict],
     user_votes: dict[UUID, int],
+    t: Callable[[str], str],
     page: int = 0,
     page_size: int = 8,
+    currency: str = "RUB",
 ) -> InlineKeyboardMarkup:
     """Build voting keyboard.
 
     items: [{"id", "name", "price", "quantity", "total_claimed"}]
     user_votes: {item_id: user_claimed_qty}
     """
+    from bot.utils import format_price
     start = page * page_size
     end = start + page_size
     page_items = items[start:end]
@@ -29,10 +33,10 @@ def items_page_kb(
                 prefix = f"[{my_qty}/{max_qty}]"
             else:
                 prefix = "◻️"
-            label = f"{prefix} {item['name']} — {item['price']}₽ (×{max_qty})"
+            label = f"{prefix} {item['name']} — {format_price(item['price'], currency)} (×{max_qty})"
         else:
             prefix = "☑️" if my_qty else "◻️"
-            label = f"{prefix} {item['name']} — {item['price']}₽"
+            label = f"{prefix} {item['name']} — {format_price(item['price'], currency)}"
 
         if total_claimed > 0:
             label += f" 👤{total_claimed}"
@@ -43,23 +47,23 @@ def items_page_kb(
 
     nav = []
     if page > 0:
-        nav.append(InlineKeyboardButton(text="← Назад", callback_data=f"page:{page - 1}"))
+        nav.append(InlineKeyboardButton(text=t("Back"), callback_data=f"page:{page - 1}"))
     if end < len(items):
-        nav.append(InlineKeyboardButton(text="Далее →", callback_data=f"page:{page + 1}"))
+        nav.append(InlineKeyboardButton(text=t("Next"), callback_data=f"page:{page + 1}"))
     if nav:
         buttons.append(nav)
 
     buttons.append(
-        [InlineKeyboardButton(text="✅ Готово", callback_data="vote_done")]
+        [InlineKeyboardButton(text=t("Done"), callback_data="vote_done")]
     )
     buttons.append(
-        [InlineKeyboardButton(text="⚠️ Не вижу своё блюдо", callback_data="missing_item")]
+        [InlineKeyboardButton(text=t("Missing dish"), callback_data="missing_item")]
     )
 
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
-def participant_tip_kb() -> InlineKeyboardMarkup:
+def participant_tip_kb(t: Callable[[str], str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="0%", callback_data="ptip:0"),
@@ -67,14 +71,14 @@ def participant_tip_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="10%", callback_data="ptip:10"),
             InlineKeyboardButton(text="15%", callback_data="ptip:15"),
         ],
-        [InlineKeyboardButton(text="Другой %", callback_data="ptip:custom")],
-        [InlineKeyboardButton(text="← Перевыбрать блюда", callback_data="ptip:back")],
+        [InlineKeyboardButton(text=t("Other percent"), callback_data="ptip:custom")],
+        [InlineKeyboardButton(text=t("Reselect dishes"), callback_data="ptip:back")],
     ])
 
 
-def participant_summary_kb() -> InlineKeyboardMarkup:
+def participant_summary_kb(t: Callable[[str], str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Подтвердить", callback_data="pconfirm")],
-        [InlineKeyboardButton(text="← Перевыбрать блюда", callback_data="preselect")],
-        [InlineKeyboardButton(text="✏️ Изменить чаевые", callback_data="pretip")],
+        [InlineKeyboardButton(text=t("Confirm"), callback_data="pconfirm")],
+        [InlineKeyboardButton(text=t("Reselect dishes"), callback_data="preselect")],
+        [InlineKeyboardButton(text=t("Change tip"), callback_data="pretip")],
     ])

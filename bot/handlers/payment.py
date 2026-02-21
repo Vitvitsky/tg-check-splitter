@@ -1,6 +1,7 @@
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, LabeledPrice, Message, PreCheckoutQuery
+from aiogram.utils.i18n import gettext as _
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import get_settings
@@ -16,11 +17,11 @@ async def request_payment(callback: CallbackQuery):
     await callback.answer()
     settings = get_settings()
     await callback.message.answer_invoice(
-        title="Распознавание чека",
-        description="Оплата за OCR-распознавание одного чека",
+        title=_("Invoice title"),
+        description=_("Invoice description"),
         payload="scan_payment",
         currency="XTR",
-        prices=[LabeledPrice(label="Сканирование чека", amount=settings.scan_price_stars)],
+        prices=[LabeledPrice(label=_("Scan label"), amount=settings.scan_price_stars)],
     )
 
 
@@ -49,6 +50,6 @@ async def successful_payment(
 
     await db.commit()
     await message.answer(
-        "Оплата прошла! Нажмите кнопку, чтобы запустить распознавание.",
-        reply_markup=photo_collected_kb(),
+        _("Payment success"),
+        reply_markup=photo_collected_kb(_),
     )

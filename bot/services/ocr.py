@@ -22,6 +22,8 @@ Return ONLY valid JSON (no markdown, no explanation):
   "currency": "RUB"
 }
 
+Currency codes: RUB, EUR, USD, GBP, UAH, etc. Use the code from the receipt.
+
 Rules:
 - price is the total price for that line (price × quantity already multiplied)
 - quantity is how many of that item

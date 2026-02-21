@@ -74,6 +74,14 @@ class SessionService:
         await self._db.refresh(photo)
         return photo
 
+    async def update_currency(self, session_id: UUID | str, currency: str) -> None:
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        session = await self._db.get(Session, session_id)
+        if session:
+            session.currency = currency[:8] if currency else "RUB"
+            await self._db.commit()
+
     async def save_ocr_items(
         self, session_id: UUID | str, items_data: list[dict]
     ) -> list[SessionItem]:
@@ -94,26 +102,41 @@ class SessionService:
             await self._db.refresh(item)
         return items
 
-    async def cycle_vote(self, item_id: UUID, user_tg_id: int, max_qty: int) -> int:
-        """Cycle vote quantity: 0 → 1 → 2 → ... → max_qty → 0. Returns new quantity."""
+    async def cycle_vote(
+        self, item_id: UUID, user_tg_id: int, max_qty: int
+    ) -> tuple[int, bool]:
+        """Cycle vote: 0 → 1 → 2 → ... until total_claimed exhausted, then 0.
+        Returns (new_quantity, overflow_prevented).
+        overflow_prevented=True means we blocked increment because item was fully claimed."""
         existing = await self._db.execute(
             select(ItemVote).where(
                 ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id
             )
         )
         vote = existing.scalar_one_or_none()
+
+        # Total claimed by all users
+        total_result = await self._db.execute(
+            select(ItemVote.quantity).where(ItemVote.item_id == item_id)
+        )
+        total_claimed = sum(r[0] for r in total_result.all())
+
         if vote:
             if vote.quantity >= max_qty:
                 await self._db.delete(vote)
                 await self._db.commit()
-                return 0
+                return 0, False
+            if total_claimed >= max_qty:
+                return vote.quantity, True
             vote.quantity += 1
             await self._db.commit()
-            return vote.quantity
+            return vote.quantity, False
+        if total_claimed >= max_qty:
+            return 0, True
         new_vote = ItemVote(item_id=item_id, user_tg_id=user_tg_id, quantity=1)
         self._db.add(new_vote)
         await self._db.commit()
-        return 1
+        return 1, False
 
     async def add_vote_all(self, item_id: UUID, user_tg_id: int, qty: int) -> None:
         """Add a vote with specific quantity (for split-equal)."""

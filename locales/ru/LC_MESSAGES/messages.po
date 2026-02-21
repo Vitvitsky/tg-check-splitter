@@ -1,0 +1,236 @@
+# Russian
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: ru\n"
+
+msgid "Start greeting"
+msgstr "Привет! Я помогу разделить счёт."
+
+msgid "Send photo to start"
+msgstr "Отправьте фото чека, чтобы начать."
+
+msgid "Split check"
+msgstr "📸 Разделить чек"
+
+msgid "My quota"
+msgstr "📊 Мой лимит"
+
+msgid "Help"
+msgstr "❓ Помощь"
+
+msgid "Help text"
+msgstr "Как это работает:\n\n1. Отправьте фото чека — я распознаю позиции\n2. Проверьте список и пригласите друзей по ссылке\n3. Каждый отметит свои блюда\n4. Выберите чаевые и получите персональные суммы"
+
+msgid "Session not found"
+msgstr "Сессия не найдена или вы уже участвуете."
+
+msgid "Joined voting"
+msgstr "Вы присоединились к сессии! Выберите свои блюда."
+
+msgid "Joined waiting"
+msgstr "Вы присоединились. Ожидайте начала голосования."
+
+msgid "Preview results"
+msgstr "Предварительный расчёт:\n\n{text}"
+
+msgid "Free quota"
+msgstr "Бесплатно: {free_left}/{limit} в месяц"
+
+msgid "Paid scans"
+msgstr "Оплачено: {paid}"
+
+msgid "Reset date"
+msgstr "Сброс: {date}"
+
+msgid "You are participant"
+msgstr "Вы участник сессии. Ожидайте голосования."
+
+msgid "Photo accepted"
+msgstr "Фото {n} принято. Отправьте ещё или нажмите:"
+
+msgid "Recognize"
+msgstr "📸 Распознать"
+
+msgid "All correct"
+msgstr "✅ Всё верно"
+
+msgid "Edit"
+msgstr "✏️ Редактировать"
+
+msgid "Resend"
+msgstr "🔄 Переотправить"
+
+msgid "Quota exhausted"
+msgstr "Бесплатный лимит исчерпан ({limit}/мес)."
+
+msgid "Pay stars"
+msgstr "Оплатить {stars} Stars"
+
+msgid "Recognizing"
+msgstr "⏳ Распознаю чек..."
+
+msgid "OCR error"
+msgstr "❌ Ошибка распознавания: {error}\n\nПопробуйте переотправить фото."
+
+msgid "Recognized items"
+msgstr "📋 Распознанные позиции:"
+
+msgid "Items total mismatch"
+msgstr "⚠️ Сумма позиций ({items_sum}) не совпадает с итогом чека ({total})"
+
+msgid "Receipt total"
+msgstr "Итого по чеку: {total}"
+
+msgid "Send photo again"
+msgstr "Отправьте фото чека заново."
+
+msgid "Editing items"
+msgstr "Редактирование позиций:"
+
+msgid "Add item"
+msgstr "➕ Добавить позицию"
+
+msgid "Done"
+msgstr "✅ Готово"
+
+msgid "Deleted"
+msgstr "Удалено"
+
+msgid "Edit item prompt"
+msgstr "Введите новое название и цену через дефис:\nНапример: Пицца Маргарита - 700"
+
+msgid "Add item prompt"
+msgstr "Введите название и цену через дефис:\nНапример: Тирамису - 380"
+
+msgid "Invalid format"
+msgstr "Неверный формат. Пример: Пицца Маргарита - 700"
+
+msgid "Item added"
+msgstr "✅ Добавлено: {name} — {price}"
+
+msgid "Item updated"
+msgstr "✅ Обновлено: {name} — {price}"
+
+msgid "Mark your dishes"
+msgstr "Отметьте свои блюда:"
+
+msgid "Back"
+msgstr "← Назад"
+
+msgid "Next"
+msgstr "Далее →"
+
+msgid "Missing dish"
+msgstr "⚠️ Не вижу своё блюдо"
+
+msgid "Item fully claimed"
+msgstr "Уже выбрали другие участники"
+
+msgid "Select tip percent"
+msgstr "Выберите процент чаевых:"
+
+msgid "Other percent"
+msgstr "Другой %"
+
+msgid "Reselect dishes"
+msgstr "← Перевыбрать блюда"
+
+msgid "Enter tip number"
+msgstr "Введите процент чаевых (число):"
+
+msgid "Enter number example"
+msgstr "Введите число (например: 12)."
+
+msgid "Your dishes"
+msgstr "🧾 Ваши блюда:"
+
+msgid "Dishes sum"
+msgstr "Сумма блюд: {amount}"
+
+msgid "Tip percent amount"
+msgstr "Чаевые {percent}%: {amount}"
+
+msgid "Grand total"
+msgstr "💰 Итого: {amount}"
+
+msgid "Confirm"
+msgstr "✅ Подтвердить"
+
+msgid "Change tip"
+msgstr "✏️ Изменить чаевые"
+
+msgid "Confirmed"
+msgstr "Подтверждено!"
+
+msgid "Choice confirmed"
+msgstr "✅ Ваш выбор подтверждён. Ожидайте итогов от админа."
+
+msgid "Admin notified"
+msgstr "Админ получил уведомление."
+
+msgid "Select one dish"
+msgstr "Выберите хотя бы одно блюдо!"
+
+msgid "Member confirmed"
+msgstr "✅ {name} подтвердил(а) выбор ({count}/{total})"
+
+msgid "Member missing dish"
+msgstr "⚠️ {name} не нашёл своё блюдо в списке!"
+
+msgid "Invite caption"
+msgstr "Ссылка для участников:\n{url}\n\nПокажите QR-код или отправьте ссылку участникам."
+
+msgid "Waiting participants"
+msgstr "Ожидаю участников..."
+
+msgid "Current calculation"
+msgstr "📊 Текущий расчёт"
+
+msgid "Finish"
+msgstr "⏹ Завершить"
+
+msgid "Preview results"
+msgstr "Предварительный расчёт:\n\n{text}"
+
+msgid "Nobody voted"
+msgstr "Никто не отметил:"
+
+msgid "Reopen voting"
+msgstr "🔄 Вернуть голосование"
+
+msgid "Split equal"
+msgstr "➗ Разделить поровну"
+
+msgid "Remove from bill"
+msgstr "🗑 Убрать из счёта"
+
+msgid "Session results"
+msgstr "Итоги сессии:\n\n{text}"
+
+msgid "All settled"
+msgstr "✅ Все рассчитались"
+
+msgid "Voting continues"
+msgstr "Голосование продолжается."
+
+msgid "Voting opened"
+msgstr "Голосование открыто."
+
+msgid "Session closed"
+msgstr "Сессия закрыта!\n\n{text}"
+
+msgid "Session finished"
+msgstr "Сессия завершена!\nТвоя доля: {share} (чаевые {tip}%)"
+
+msgid "Invoice title"
+msgstr "Распознавание чека"
+
+msgid "Invoice description"
+msgstr "Оплата за OCR-распознавание одного чека"
+
+msgid "Scan label"
+msgstr "Сканирование чека"
+
+msgid "Payment success"
+msgstr "Оплата прошла! Нажмите кнопку, чтобы запустить распознавание."

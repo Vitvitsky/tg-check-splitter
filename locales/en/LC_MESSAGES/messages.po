@@ -1,0 +1,233 @@
+# English
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: en\n"
+
+msgid "Start greeting"
+msgstr "Hi! I'll help split the bill."
+
+msgid "Send photo to start"
+msgstr "Send a photo of the receipt to get started."
+
+msgid "Split check"
+msgstr "📸 Split check"
+
+msgid "My quota"
+msgstr "📊 My quota"
+
+msgid "Help"
+msgstr "❓ Help"
+
+msgid "Help text"
+msgstr "How it works:\n\n1. Send a photo of the receipt — I'll recognize the items\n2. Check the list and invite friends via the link\n3. Each person marks their dishes\n4. Choose tip and get your personal total"
+
+msgid "Session not found"
+msgstr "Session not found or you're already participating."
+
+msgid "Joined voting"
+msgstr "You've joined! Select your dishes."
+
+msgid "Joined waiting"
+msgstr "You've joined. Wait for voting to start."
+
+msgid "Free quota"
+msgstr "Free: {free_left}/{limit} per month"
+
+msgid "Paid scans"
+msgstr "Paid: {paid}"
+
+msgid "Reset date"
+msgstr "Reset: {date}"
+
+msgid "You are participant"
+msgstr "You're a participant. Wait for voting."
+
+msgid "Photo accepted"
+msgstr "Photo {n} received. Send more or press:"
+
+msgid "Recognize"
+msgstr "📸 Recognize"
+
+msgid "All correct"
+msgstr "✅ All correct"
+
+msgid "Edit"
+msgstr "✏️ Edit"
+
+msgid "Resend"
+msgstr "🔄 Resend"
+
+msgid "Quota exhausted"
+msgstr "Free limit reached ({limit}/month)."
+
+msgid "Pay stars"
+msgstr "Pay {stars} Stars"
+
+msgid "Recognizing"
+msgstr "⏳ Recognizing..."
+
+msgid "OCR error"
+msgstr "❌ Recognition error: {error}\n\nTry resending the photo."
+
+msgid "Recognized items"
+msgstr "📋 Recognized items:"
+
+msgid "Items total mismatch"
+msgstr "⚠️ Items total ({items_sum}) doesn't match receipt total ({total})"
+
+msgid "Receipt total"
+msgstr "Receipt total: {total}"
+
+msgid "Send photo again"
+msgstr "Send the receipt photo again."
+
+msgid "Editing items"
+msgstr "Editing items:"
+
+msgid "Add item"
+msgstr "➕ Add item"
+
+msgid "Done"
+msgstr "✅ Done"
+
+msgid "Deleted"
+msgstr "Deleted"
+
+msgid "Edit item prompt"
+msgstr "Enter new name and price separated by dash:\nE.g.: Margherita Pizza - 700"
+
+msgid "Add item prompt"
+msgstr "Enter name and price separated by dash:\nE.g.: Tiramisu - 380"
+
+msgid "Invalid format"
+msgstr "Invalid format. Example: Margherita Pizza - 700"
+
+msgid "Item added"
+msgstr "✅ Added: {name} — {price}"
+
+msgid "Item updated"
+msgstr "✅ Updated: {name} — {price}"
+
+msgid "Mark your dishes"
+msgstr "Mark your dishes:"
+
+msgid "Back"
+msgstr "← Back"
+
+msgid "Next"
+msgstr "Next →"
+
+msgid "Missing dish"
+msgstr "⚠️ My dish is missing"
+
+msgid "Item fully claimed"
+msgstr "Already claimed by other participants"
+
+msgid "Select tip percent"
+msgstr "Select tip percentage:"
+
+msgid "Other percent"
+msgstr "Other %"
+
+msgid "Reselect dishes"
+msgstr "← Reselect dishes"
+
+msgid "Enter tip number"
+msgstr "Enter tip percentage (number):"
+
+msgid "Enter number example"
+msgstr "Enter a number (e.g.: 12)."
+
+msgid "Your dishes"
+msgstr "🧾 Your dishes:"
+
+msgid "Dishes sum"
+msgstr "Dishes total: {amount}"
+
+msgid "Tip percent amount"
+msgstr "Tip {percent}%: {amount}"
+
+msgid "Grand total"
+msgstr "💰 Total: {amount}"
+
+msgid "Confirm"
+msgstr "✅ Confirm"
+
+msgid "Change tip"
+msgstr "✏️ Change tip"
+
+msgid "Confirmed"
+msgstr "Confirmed!"
+
+msgid "Choice confirmed"
+msgstr "✅ Your choice is confirmed. Wait for the final results."
+
+msgid "Admin notified"
+msgstr "Admin has been notified."
+
+msgid "Select one dish"
+msgstr "Select at least one dish!"
+
+msgid "Member confirmed"
+msgstr "✅ {name} confirmed ({count}/{total})"
+
+msgid "Member missing dish"
+msgstr "⚠️ {name} couldn't find their dish in the list!"
+
+msgid "Invite caption"
+msgstr "Invite link:\n{url}\n\nShow the QR code or send the link to participants."
+
+msgid "Waiting participants"
+msgstr "Waiting for participants..."
+
+msgid "Current calculation"
+msgstr "📊 Current calculation"
+
+msgid "Finish"
+msgstr "⏹ Finish"
+
+msgid "Preview results"
+msgstr "Preview:\n\n{text}"
+
+msgid "Nobody voted"
+msgstr "Nobody selected:"
+
+msgid "Reopen voting"
+msgstr "🔄 Reopen voting"
+
+msgid "Split equal"
+msgstr "➗ Split equally"
+
+msgid "Remove from bill"
+msgstr "🗑 Remove from bill"
+
+msgid "Session results"
+msgstr "Session results:\n\n{text}"
+
+msgid "All settled"
+msgstr "✅ All settled"
+
+msgid "Voting continues"
+msgstr "Voting continues."
+
+msgid "Voting opened"
+msgstr "Voting opened."
+
+msgid "Session closed"
+msgstr "Session closed!\n\n{text}"
+
+msgid "Session finished"
+msgstr "Session finished! Your share: {share} (tip {tip}%)"
+
+msgid "Invoice title"
+msgstr "Receipt recognition"
+
+msgid "Invoice description"
+msgstr "Payment for one receipt OCR scan"
+
+msgid "Scan label"
+msgstr "Receipt scan"
+
+msgid "Payment success"
+msgstr "Payment received! Press the button to start recognition."

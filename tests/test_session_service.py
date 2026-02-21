@@ -60,16 +60,29 @@ async def test_cycle_vote(svc, db_session):
     item_id = items[0].id
 
     # 0 → 1
-    qty = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
-    assert qty == 1
+    qty, overflow = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
+    assert qty == 1 and not overflow
 
     # 1 → 2
-    qty = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
-    assert qty == 2
+    qty, overflow = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
+    assert qty == 2 and not overflow
 
     # 2 → 0 (removed)
-    qty = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
-    assert qty == 0
+    qty, overflow = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=2)
+    assert qty == 0 and not overflow
+
+
+async def test_cycle_vote_overflow(svc, db_session):
+    """Second user cannot claim when item fully claimed by first user."""
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
+    items = await svc.save_ocr_items(session.id, [{"name": "Coffee", "price": 200, "quantity": 1}])
+    item_id = items[0].id
+
+    qty, overflow = await svc.cycle_vote(item_id, user_tg_id=222, max_qty=1)
+    assert qty == 1 and not overflow
+
+    qty, overflow = await svc.cycle_vote(item_id, user_tg_id=333, max_qty=1)
+    assert qty == 0 and overflow
 
 
 async def test_get_unvoted_items(svc, db_session):
@@ -78,7 +91,7 @@ async def test_get_unvoted_items(svc, db_session):
         {"name": "Pizza", "price": 650, "quantity": 1},
         {"name": "Soup", "price": 450, "quantity": 1},
     ])
-    await svc.cycle_vote(items[0].id, user_tg_id=222, max_qty=1)
+    await svc.cycle_vote(items[0].id, user_tg_id=222, max_qty=1)  # unpack not needed
 
     unvoted = await svc.get_unvoted_items(session.id)
     assert len(unvoted) == 1

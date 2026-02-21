@@ -1,24 +1,26 @@
+from collections.abc import Callable
+
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-def voting_progress_kb() -> InlineKeyboardMarkup:
+def voting_progress_kb(t: Callable[[str], str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
-            InlineKeyboardButton(text="📊 Текущий расчёт", callback_data="admin_preview"),
-            InlineKeyboardButton(text="⏹ Завершить", callback_data="admin_finish"),
+            InlineKeyboardButton(text=t("Current calculation"), callback_data="admin_preview"),
+            InlineKeyboardButton(text=t("Finish"), callback_data="admin_finish"),
         ],
     ])
 
 
-def unvoted_items_kb() -> InlineKeyboardMarkup:
+def unvoted_items_kb(t: Callable[[str], str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🔄 Вернуть голосование", callback_data="admin_reopen")],
-        [InlineKeyboardButton(text="➗ Разделить поровну", callback_data="admin_split_equal")],
-        [InlineKeyboardButton(text="🗑 Убрать из счёта", callback_data="admin_remove_unvoted")],
+        [InlineKeyboardButton(text=t("Reopen voting"), callback_data="admin_reopen")],
+        [InlineKeyboardButton(text=t("Split equal"), callback_data="admin_split_equal")],
+        [InlineKeyboardButton(text=t("Remove from bill"), callback_data="admin_remove_unvoted")],
     ])
 
 
-def tip_select_kb() -> InlineKeyboardMarkup:
+def tip_select_kb(t: Callable[[str], str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [
             InlineKeyboardButton(text="0%", callback_data="tip:0"),
@@ -26,11 +28,11 @@ def tip_select_kb() -> InlineKeyboardMarkup:
             InlineKeyboardButton(text="10%", callback_data="tip:10"),
             InlineKeyboardButton(text="15%", callback_data="tip:15"),
         ],
-        [InlineKeyboardButton(text="Другой %", callback_data="tip:custom")],
+        [InlineKeyboardButton(text=t("Other percent"), callback_data="tip:custom")],
     ])
 
 
-def settle_kb() -> InlineKeyboardMarkup:
+def settle_kb(t: Callable[[str], str]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Все рассчитались", callback_data="admin_settle")],
+        [InlineKeyboardButton(text=t("All settled"), callback_data="admin_settle")],
     ])

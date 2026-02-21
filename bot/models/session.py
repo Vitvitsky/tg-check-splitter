@@ -19,6 +19,7 @@ class Session(Base):
     admin_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     invite_code: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="created", nullable=False)
+    currency: Mapped[str] = mapped_column(String(8), default="RUB", nullable=False)
     tip_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

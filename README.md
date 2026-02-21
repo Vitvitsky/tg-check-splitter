@@ -52,6 +52,25 @@ uv run python -m bot
 | `FREE_SCANS_PER_MONTH` | Лимит бесплатных сканирований (по умолчанию 3) |
 | `SCAN_PRICE_STARS` | Цена платного сканирования в Telegram Stars |
 
+## Мультиязычность
+
+Бот использует встроенный i18n aiogram (gettext + Babel). Локаль берётся из `User.language_code` в Telegram (настройки языка пользователя). Поддерживаются **ru** и **en**.
+
+Добавление нового языка:
+```bash
+pybabel init -i locales/messages.pot -d locales -D messages -l uk
+# Отредактировать locales/uk/LC_MESSAGES/messages.po
+pybabel compile -d locales -D messages
+```
+
+Обновление переводов после изменения строк в коде:
+```bash
+pybabel extract -F babel.cfg -o locales/messages.pot .
+pybabel update -d locales -D messages -i locales/messages.pot
+# Отредактировать .po, затем:
+pybabel compile -d locales -D messages
+```
+
 ## Стек
 
 - **aiogram 3.x** — Telegram Bot API (long polling)
