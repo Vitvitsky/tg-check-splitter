@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import get_settings
 from bot.handlers.voting import send_voting_keyboard_to_user
-from bot.keyboards.check import main_menu_kb
+from bot.keyboards.check import main_menu_kb, webapp_button_kb
 from bot.services.quota import QuotaService
 from bot.services.session import SessionService
 
@@ -33,22 +33,38 @@ async def cmd_start_deep_link(
     session = await svc.get_session_by_invite(invite_code)
     await state.update_data(session_id=str(session.id))
 
+    settings = get_settings()
+    webapp_url = f"{settings.webapp_url}?startapp={invite_code}"
+
     if session and session.status == "voting":
         await message.answer(_("Joined voting"))
         await send_voting_keyboard_to_user(
-            bot, db, message.from_user.id, str(session.id),
+            bot,
+            db,
+            message.from_user.id,
+            str(session.id),
             locale=message.from_user.language_code,
         )
     else:
         await message.answer(_("Joined waiting"))
 
+    await message.answer(
+        _("Open check in Mini App"),
+        reply_markup=webapp_button_kb(webapp_url, text="Перейти к чеку"),
+    )
+
 
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     """Handle plain /start."""
+    settings = get_settings()
     await message.answer(
         _("Start greeting") + "\n\n" + _("Send photo to start"),
         reply_markup=main_menu_kb(_),
+    )
+    await message.answer(
+        _("Or open Mini App"),
+        reply_markup=webapp_button_kb(settings.webapp_url),
     )
 
 
@@ -67,9 +83,7 @@ async def quota_btn(message: Message, db: AsyncSession):
 
     reset_str = reset_at.strftime("%d.%m.%Y")
     lines = [
-        _("Free quota").format(
-            free_left=free_left, limit=settings.free_scans_per_month
-        ),
+        _("Free quota").format(free_left=free_left, limit=settings.free_scans_per_month),
         _("Paid scans").format(paid=paid_scans),
         _("Reset date").format(date=reset_str),
     ]

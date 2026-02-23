@@ -3,12 +3,14 @@ import io
 import qrcode
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import BufferedInputFile, CallbackQuery, Message
+from aiogram.types import BufferedInputFile, CallbackQuery
 from aiogram.utils.i18n import gettext as _
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from bot.config import get_settings
 from bot.handlers.voting import send_voting_keyboard_to_user
 from bot.keyboards.admin import settle_kb, unvoted_items_kb, voting_progress_kb
+from bot.keyboards.check import webapp_button_kb
 from bot.services.calculator import calculate_shares
 from bot.services.session import SessionService
 
@@ -26,21 +28,27 @@ async def confirm_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSessi
 
     await svc.update_status(session_id, "voting")
 
+    settings = get_settings()
     bot_info = await bot.get_me()
     invite_url = f"https://t.me/{bot_info.username}?start={session.invite_code}"
+    webapp_invite_url = f"{settings.webapp_url}?startapp={session.invite_code}"
 
-    qr = qrcode.make(invite_url)
+    qr = qrcode.make(webapp_invite_url)
     buf = io.BytesIO()
     qr.save(buf, format="PNG")
     buf.seek(0)
 
     await callback.message.answer_photo(
         BufferedInputFile(buf.read(), filename="qr.png"),
-        caption=_("Invite caption").format(url=invite_url),
+        caption=_("Invite caption").format(url=invite_url) + f"\n\nMini App: {webapp_invite_url}",
     )
     await callback.message.answer(
         _("Waiting participants"),
         reply_markup=voting_progress_kb(_),
+    )
+    await callback.message.answer(
+        _("Open check in Mini App"),
+        reply_markup=webapp_button_kb(webapp_invite_url, text="Открыть чек"),
     )
 
     # Send voting keyboard to admin and all already-joined participants
@@ -67,6 +75,7 @@ async def finish_voting(callback: CallbackQuery, state: FSMContext, db: AsyncSes
 
     if unvoted:
         from bot.utils import format_price
+
         session = await svc.get_session_by_id(session_id)
         curr = getattr(session, "currency", "RUB") or "RUB"
         lines = [_("Nobody voted")]
@@ -144,16 +153,20 @@ async def settle_session(callback: CallbackQuery, state: FSMContext, db: AsyncSe
 
     # Notify all members with per-person tips
     items_data = [
-        {"price": item.price, "quantity": item.quantity, "votes": {v.user_tg_id: v.quantity for v in item.votes}}
+        {
+            "price": item.price,
+            "quantity": item.quantity,
+            "votes": {v.user_tg_id: v.quantity for v in item.votes},
+        }
         for item in session.items
     ]
     per_person_tips = {
-        m.user_tg_id: (m.tip_percent if m.tip_percent is not None else 0)
-        for m in session.members
+        m.user_tg_id: (m.tip_percent if m.tip_percent is not None else 0) for m in session.members
     }
     shares = calculate_shares(items_data, per_person_tips=per_person_tips)
 
     from bot.utils import format_price
+
     curr = getattr(session, "currency", "RUB") or "RUB"
     for member in session.members:
         share = int(shares.get(member.user_tg_id, 0))
@@ -175,13 +188,16 @@ async def _format_results(db: AsyncSession, session_id: str) -> str:
     curr = getattr(session, "currency", "RUB") or "RUB"
 
     items_data = [
-        {"price": item.price, "quantity": item.quantity, "votes": {v.user_tg_id: v.quantity for v in item.votes}}
+        {
+            "price": item.price,
+            "quantity": item.quantity,
+            "votes": {v.user_tg_id: v.quantity for v in item.votes},
+        }
         for item in session.items
     ]
 
     per_person_tips = {
-        m.user_tg_id: (m.tip_percent if m.tip_percent is not None else 0)
-        for m in session.members
+        m.user_tg_id: (m.tip_percent if m.tip_percent is not None else 0) for m in session.members
     }
     shares = calculate_shares(items_data, per_person_tips=per_person_tips)
 

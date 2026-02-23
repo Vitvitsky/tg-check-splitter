@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str
     openrouter_model: str = "anthropic/claude-sonnet-4-5-20250929"
     database_url: str
+    webapp_url: str = "http://localhost:5173"
     free_scans_per_month: int = 3
     scan_price_stars: int = 1
 

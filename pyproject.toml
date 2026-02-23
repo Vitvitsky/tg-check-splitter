@@ -11,6 +11,9 @@ dependencies = [
     "pydantic>=2.0,<3",
     "pydantic-settings>=2.0,<3",
     "qrcode[pil]>=8.0,<9",
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.34,<1",
+    "python-multipart>=0.0.20,<1",
 ]
 
 [project.optional-dependencies]
@@ -29,3 +32,8 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py312"
 line-length = 99
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.1",
+]
