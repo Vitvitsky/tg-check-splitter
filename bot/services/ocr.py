@@ -78,7 +78,7 @@ class OcrService:
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 json={
                     "model": self._model,
-                    "max_tokens": 2048,
+                    "max_tokens": 4096,
                     "messages": [
                         {"role": "system", "content": SYSTEM_PROMPT},
                         {"role": "user", "content": content},
@@ -113,7 +113,10 @@ class OcrService:
         try:
             data = json.loads(raw)
         except json.JSONDecodeError:
-            raise ValueError(f"LLM returned invalid JSON: {raw[:300]}")
+            # Try to repair truncated JSON (LLM hit max_tokens)
+            data = OcrService._try_repair_json(raw)
+            if data is None:
+                raise ValueError(f"LLM returned invalid JSON: {raw[:300]}")
 
         items = [
             OcrItem(
@@ -134,6 +137,43 @@ class OcrService:
             currency=data.get("currency", "RUB"),
             total_mismatch=mismatch,
         )
+
+    @staticmethod
+    def _try_repair_json(raw: str) -> dict | None:
+        """Attempt to fix truncated JSON from LLM (e.g. missing closing brackets).
+
+        Strategy: strip the last incomplete item (after the last comma in the
+        items array), then close all open brackets/braces.
+        """
+        # Find the last complete JSON object in the items array
+        # Look for the last complete }, before truncation
+        last_complete = raw.rfind("},")
+        if last_complete == -1:
+            last_complete = raw.rfind("}")
+        if last_complete == -1:
+            return None
+
+        truncated = raw[: last_complete + 1]
+
+        # Count unclosed brackets and braces
+        open_braces = truncated.count("{") - truncated.count("}")
+        open_brackets = truncated.count("[") - truncated.count("]")
+
+        # Close them
+        truncated += "]" * max(open_brackets, 0)
+        truncated += "}" * max(open_braces, 0)
+
+        try:
+            data = json.loads(truncated)
+            if "items" in data and isinstance(data["items"], list):
+                logger.warning("OCR: repaired truncated JSON (%d items recovered)", len(data["items"]))
+                # If total is missing, sum items
+                if "total" not in data:
+                    data["total"] = sum(i.get("price", 0) for i in data["items"])
+                return data
+        except json.JSONDecodeError:
+            pass
+        return None
 
     @staticmethod
     def _merge_results(results: list["OcrResult"]) -> "OcrResult":

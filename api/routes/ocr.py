@@ -116,23 +116,27 @@ async def trigger_ocr(
     # Send OCR progress via WebSocket for multi-photo receipts
     manager = request.app.state.ws_manager
     total_photos = len(photos_bytes)
-    if total_photos > 1:
-        await manager.broadcast(session_id, {
-            "type": EVENT_OCR_PROGRESS,
-            "data": {"current": 0, "total": total_photos},
-        })
-
-        results = []
-        for i, photo in enumerate(photos_bytes):
-            single = await ocr_service._parse_single_photo(photo)
-            results.append(single)
+    try:
+        if total_photos > 1:
             await manager.broadcast(session_id, {
                 "type": EVENT_OCR_PROGRESS,
-                "data": {"current": i + 1, "total": total_photos},
+                "data": {"current": 0, "total": total_photos},
             })
-        result = ocr_service._merge_results(results)
-    else:
-        result = await ocr_service.parse_receipt(photos_bytes)
+
+            results = []
+            for i, photo in enumerate(photos_bytes):
+                single = await ocr_service._parse_single_photo(photo)
+                results.append(single)
+                await manager.broadcast(session_id, {
+                    "type": EVENT_OCR_PROGRESS,
+                    "data": {"current": i + 1, "total": total_photos},
+                })
+            result = ocr_service._merge_results(results)
+        else:
+            result = await ocr_service.parse_receipt(photos_bytes)
+    except ValueError as e:
+        logger.error("OCR failed: %s", e)
+        raise HTTPException(422, detail="Could not parse receipt. Try a clearer photo.")
 
     await svc.save_ocr_items(
         session_id,
