@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -11,6 +13,7 @@ from bot.services.ocr import OcrService
 from bot.services.quota import QuotaService
 from bot.services.session import SessionService
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -23,6 +26,7 @@ class CheckStates(StatesGroup):
 @router.message(F.photo)
 async def handle_photo(message: Message, state: FSMContext, db: AsyncSession):
     """Receive check photo(s). Only admin (creator) or new users can send photos."""
+    logger.info("user_id=%s photo received", message.from_user.id)
     svc = SessionService(db)
 
     data = await state.get_data()
@@ -58,6 +62,7 @@ async def handle_photo(message: Message, state: FSMContext, db: AsyncSession):
 @router.callback_query(F.data == "ocr_start")
 async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession, bot: Bot):
     """Download photos and run OCR."""
+    logger.info("user_id=%s OCR start", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data["session_id"]
@@ -139,6 +144,7 @@ async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
 @router.callback_query(F.data == "ocr_retry")
 async def retry_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
     """Reset to photo collection — clear old photos and items."""
+    logger.info("user_id=%s OCR retry", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data.get("session_id")
@@ -157,6 +163,7 @@ async def retry_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
 @router.callback_query(F.data == "ocr_edit")
 async def start_edit(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
     """Show items list with edit/delete buttons."""
+    logger.info("user_id=%s edit items", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data["session_id"]

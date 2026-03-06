@@ -1,3 +1,4 @@
+import logging
 from uuid import UUID
 
 from aiogram import Bot, F, Router
@@ -12,6 +13,7 @@ from bot.keyboards.voting import items_page_kb, participant_summary_kb, particip
 from bot.services.calculator import calculate_user_share
 from bot.services.session import SessionService
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -118,6 +120,7 @@ async def _build_summary_text(
 
 @router.callback_query(F.data.startswith("vote:"))
 async def handle_vote(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    logger.info("user_id=%s vote item=%s", callback.from_user.id, callback.data.split(":")[1])
     item_id = UUID(callback.data.split(":")[1])
     data = await state.get_data()
     session_id = data.get("session_id")
@@ -150,6 +153,7 @@ async def handle_page(callback: CallbackQuery, state: FSMContext, db: AsyncSessi
 @router.callback_query(F.data == "vote_done")
 async def handle_vote_done(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
     """After selecting dishes -> show tip selection."""
+    logger.info("user_id=%s vote done", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data.get("session_id")
@@ -172,6 +176,8 @@ async def handle_vote_done(callback: CallbackQuery, state: FSMContext, db: Async
 @router.callback_query(F.data.startswith("ptip:"))
 async def handle_participant_tip(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
     tip_value = callback.data.split(":")[1]
+
+    logger.info("user_id=%s tip=%s", callback.from_user.id, tip_value)
 
     if tip_value == "back":
         # Go back to dish selection
@@ -227,6 +233,7 @@ async def handle_custom_tip_input(message: Message, state: FSMContext, db: Async
 
 @router.callback_query(F.data == "pconfirm")
 async def handle_participant_confirm(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    logger.info("user_id=%s confirmed selection", callback.from_user.id)
     await callback.answer(_("Confirmed"))
     data = await state.get_data()
     session_id = data["session_id"]
@@ -273,6 +280,7 @@ async def handle_change_tip(callback: CallbackQuery, state: FSMContext):
 
 @router.callback_query(F.data == "missing_item")
 async def handle_missing_item(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    logger.info("user_id=%s missing item report", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data.get("session_id")

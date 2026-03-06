@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, LabeledPrice, Message, PreCheckoutQuery
@@ -9,11 +11,13 @@ from bot.keyboards.check import photo_collected_kb
 from bot.models.payment import Payment
 from bot.services.quota import QuotaService
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
 @router.callback_query(F.data == "pay_stars")
 async def request_payment(callback: CallbackQuery):
+    logger.info("user_id=%s payment requested", callback.from_user.id)
     await callback.answer()
     settings = get_settings()
     await callback.message.answer_invoice(
@@ -34,6 +38,7 @@ async def pre_checkout(query: PreCheckoutQuery):
 async def successful_payment(
     message: Message, state: FSMContext, db: AsyncSession, bot: Bot
 ):
+    logger.info("user_id=%s payment success amount=%s", message.from_user.id, message.successful_payment.total_amount)
     settings = get_settings()
 
     payment = Payment(

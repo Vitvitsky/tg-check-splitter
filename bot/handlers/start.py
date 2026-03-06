@@ -1,3 +1,5 @@
+import logging
+
 from aiogram import Bot, F, Router
 from aiogram.filters import CommandStart, CommandObject
 from aiogram.fsm.context import FSMContext
@@ -11,6 +13,7 @@ from bot.keyboards.check import main_menu_kb, webapp_button_kb
 from bot.services.quota import QuotaService
 from bot.services.session import SessionService
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
@@ -19,6 +22,7 @@ async def cmd_start_deep_link(
     message: Message, command: CommandObject, state: FSMContext, db: AsyncSession, bot: Bot
 ):
     """Handle /start with invite code (deep link join)."""
+    logger.info("user_id=%s deep_link=%s", message.from_user.id, command.args)
     invite_code = command.args
     svc = SessionService(db)
     member = await svc.join_session(
@@ -57,6 +61,7 @@ async def cmd_start_deep_link(
 @router.message(CommandStart())
 async def cmd_start(message: Message):
     """Handle plain /start."""
+    logger.info("user_id=%s /start", message.from_user.id)
     settings = get_settings()
     await message.answer(
         _("Start greeting") + "\n\n" + _("Send photo to start"),
@@ -77,6 +82,7 @@ async def main_menu_btn(message: Message):
 @router.message(F.text == __("My quota"))
 async def quota_btn(message: Message, db: AsyncSession):
     """Show user's scan quota."""
+    logger.info("user_id=%s quota check", message.from_user.id)
     settings = get_settings()
     quota_svc = QuotaService(db, settings.free_scans_per_month)
     free_left, paid_scans, reset_at = await quota_svc.get_quota_info(message.from_user.id)

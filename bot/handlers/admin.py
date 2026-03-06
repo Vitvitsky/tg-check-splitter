@@ -1,4 +1,5 @@
 import io
+import logging
 
 import qrcode
 from aiogram import Bot, F, Router
@@ -14,12 +15,14 @@ from bot.keyboards.check import webapp_button_kb
 from bot.services.calculator import calculate_shares
 from bot.services.session import SessionService
 
+logger = logging.getLogger(__name__)
 router = Router()
 
 
 @router.callback_query(F.data == "ocr_confirm")
 async def confirm_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession, bot: Bot):
     """Admin confirms OCR results -> generate QR + invite link + notify participants."""
+    logger.info("user_id=%s OCR confirmed, starting voting", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data["session_id"]
@@ -67,6 +70,7 @@ async def preview_results(callback: CallbackQuery, state: FSMContext, db: AsyncS
 
 @router.callback_query(F.data == "admin_finish")
 async def finish_voting(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    logger.info("user_id=%s finish voting", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data["session_id"]
@@ -98,6 +102,7 @@ async def reopen_voting(callback: CallbackQuery):
 
 @router.callback_query(F.data == "admin_split_equal")
 async def split_unvoted_equal(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    logger.info("user_id=%s split unvoted equally", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data["session_id"]
@@ -128,6 +133,7 @@ async def split_unvoted_equal(callback: CallbackQuery, state: FSMContext, db: As
 
 @router.callback_query(F.data == "admin_remove_unvoted")
 async def remove_unvoted(callback: CallbackQuery, state: FSMContext, db: AsyncSession):
+    logger.info("user_id=%s remove unvoted items", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data["session_id"]
@@ -142,6 +148,7 @@ async def remove_unvoted(callback: CallbackQuery, state: FSMContext, db: AsyncSe
 
 @router.callback_query(F.data == "admin_settle")
 async def settle_session(callback: CallbackQuery, state: FSMContext, db: AsyncSession, bot: Bot):
+    logger.info("user_id=%s settle session", callback.from_user.id)
     await callback.answer()
     data = await state.get_data()
     session_id = data["session_id"]

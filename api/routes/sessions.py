@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -24,6 +25,7 @@ from bot.models.session import SessionMember
 from bot.services.calculator import calculate_shares, calculate_user_share
 from bot.services.session import SessionService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
@@ -33,6 +35,7 @@ async def clear_history(
     db: AsyncSession = Depends(get_db),
 ):
     """Delete all settled sessions where the user is admin."""
+    logger.info("user_id=%s clear history", user.id)
     result = await db.execute(select(SessionMember).where(SessionMember.user_tg_id == user.id))
     memberships = result.scalars().all()
 
@@ -73,6 +76,7 @@ async def create_session(
     user: TelegramUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info("user_id=%s create session currency=%s", user.id, body.currency)
     svc = SessionService(db)
     session = await svc.create_session(user.id, user.first_name)
     await svc.update_currency(session.id, body.currency)
@@ -154,6 +158,7 @@ async def join_session(
     if existing is not None:
         raise HTTPException(409, "Already a session member")
 
+    logger.info("user_id=%s join session invite=%s", user.id, invite_code)
     member = await svc.join_session(invite_code, user.id, user.first_name)
     # member should not be None here since we already checked above
 
@@ -182,6 +187,7 @@ async def send_reminder(
     db: AsyncSession = Depends(get_db),
 ):
     """Send a voting reminder to a specific member (admin only)."""
+    logger.info("user_id=%s remind member=%s session=%s", user.id, member_tg_id, session_id)
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
     if session is None:
@@ -207,6 +213,7 @@ async def finish_voting(
     user: TelegramUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info("user_id=%s finish voting session=%s", user.id, session_id)
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
     if session is None:
@@ -232,6 +239,7 @@ async def settle_session(
     user: TelegramUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    logger.info("user_id=%s settle session=%s", user.id, session_id)
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
     if session is None:

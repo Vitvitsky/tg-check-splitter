@@ -1,5 +1,6 @@
 """OCR and item management routes."""
 
+import logging
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -23,6 +24,7 @@ from bot.services.ocr import OcrService
 from bot.services.quota import QuotaService
 from bot.services.session import SessionService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sessions/{session_id}", tags=["ocr"])
 
 _MAX_PHOTO_SIZE = 5 * 1024 * 1024  # 5 MB
@@ -49,6 +51,7 @@ async def upload_photos(
     db: AsyncSession = Depends(get_db),
 ) -> list[PhotoOut]:
     """Upload receipt photos for a session (admin only)."""
+    logger.info("user_id=%s upload photos session=%s count=%d", user.id, session_id, len(files))
     await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
 
@@ -78,6 +81,7 @@ async def trigger_ocr(
     db: AsyncSession = Depends(get_db),
 ) -> OcrResultOut:
     """Trigger OCR on uploaded photos (admin only)."""
+    logger.info("user_id=%s OCR trigger session=%s", user.id, session_id)
     session = await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
 
@@ -158,6 +162,7 @@ async def replace_all_items(
     db: AsyncSession = Depends(get_db),
 ) -> list[ItemOut]:
     """Replace all items in a session (admin only)."""
+    logger.info("user_id=%s replace items session=%s count=%d", user.id, session_id, len(body.items))
     await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
 
@@ -182,6 +187,7 @@ async def update_single_item(
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Update a single item (admin only)."""
+    logger.info("user_id=%s update item=%s session=%s", user.id, item_id, session_id)
     await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
     await svc.update_item(UUID(item_id), body.name, Decimal(str(body.price)))
@@ -196,6 +202,7 @@ async def delete_item(
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a single item (admin only)."""
+    logger.info("user_id=%s delete item=%s session=%s", user.id, item_id, session_id)
     await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
     await svc.delete_item(UUID(item_id))

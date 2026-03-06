@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,6 +20,7 @@ from bot.models.session import Session, SessionMember
 from bot.services.calculator import calculate_shares, calculate_user_share
 from bot.services.session import SessionService
 
+logger = logging.getLogger(__name__)
 router = APIRouter(tags=["voting"])
 
 
@@ -59,6 +62,7 @@ async def vote(
     db: AsyncSession = Depends(get_db),
 ):
     """Cycle vote on an item (0 -> 1 -> 2 -> ... -> max -> 0)."""
+    logger.info("user_id=%s vote session=%s item=%s qty=%s", user.id, session_id, body.item_id, body.quantity)
     session, _member = await _require_member(db, session_id, user)
 
     # Find the item inside this session
@@ -98,6 +102,7 @@ async def set_tip(
     db: AsyncSession = Depends(get_db),
 ):
     """Set the current user's tip percentage for this session."""
+    logger.info("user_id=%s tip=%s session=%s", user.id, body.tip_percent, session_id)
     await _require_member(db, session_id, user)
     svc = SessionService(db)
     await svc.set_member_tip(session_id, user.id, body.tip_percent)
@@ -119,6 +124,7 @@ async def confirm(
     db: AsyncSession = Depends(get_db),
 ):
     """Confirm the current user's selection."""
+    logger.info("user_id=%s confirm session=%s", user.id, session_id)
     await _require_member(db, session_id, user)
     svc = SessionService(db)
     await svc.confirm_member(session_id, user.id)
@@ -140,6 +146,7 @@ async def unconfirm(
     db: AsyncSession = Depends(get_db),
 ):
     """Undo the current user's confirmation."""
+    logger.info("user_id=%s unconfirm session=%s", user.id, session_id)
     await _require_member(db, session_id, user)
     svc = SessionService(db)
     await svc.unconfirm_member(session_id, user.id)
@@ -262,6 +269,7 @@ async def resolve_unvoted(
     db: AsyncSession = Depends(get_db),
 ):
     """Resolve unclaimed items: split equally among members or remove."""
+    logger.info("user_id=%s resolve unvoted session=%s", user.id, session_id)
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
     if session is None:
