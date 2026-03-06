@@ -562,6 +562,80 @@ WEBAPP_SECRET=<generated>  # для дополнительных internal API в
 
 ---
 
+## Статус реализации
+
+| Этап | Статус | Заметки |
+|------|--------|---------|
+| 1. Backend API + Auth | ✅ Done | 74 API tests passing |
+| 2. WebSocket real-time | ✅ Done | ConnectionManager + broadcast |
+| 3. Frontend скелет | ✅ Done | Vite + React + TG SDK + routing |
+| 4. Frontend экраны | ✅ Done | 7 original pages |
+| 5. Интеграция с ботом | ✅ Done | WebAppInfo + push notifications |
+| 6. UI Refactor (дизайн) | ✅ Done | 18 экранов из design/mini-app.pen |
+
+### UI Refactor (Этап 6b) — март 2026
+
+Полная переработка фронтенда по дизайн-макетам из `design/mini-app.pen` (Pencil).
+
+**Дизайн-система (12 компонентов):**
+`webapp/src/components/ui/` — BottomSheet, Header, Button (5 вариантов), Avatar, Badge (3 вариантов), Chip, Card, SectionLabel, Separator, ReceiptItem, MemberCard, CtaBar
+
+**Bottom Sheets (4 диалога):**
+`webapp/src/components/sheets/` — EditItemSheet, AddItemSheet, CustomTipSheet, AddGuestSheet
+
+**Новые страницы (5):**
+- VotingAdminPage — прогресс голосования, список участников, напоминания
+- UnvotedItemsPage — невостребованные позиции (split equally / remove)
+- PaymentQuotaPage — лимиты сканов, покупка за Stars
+- SessionHistoryPage — детали завершённой сессии
+- ShareSessionPage — QR код + invite link + share buttons
+
+**Обновлённая структура фронтенда:**
+```
+webapp/src/
+├── components/
+│   ├── ui/           # 12 design system components
+│   ├── sheets/       # 4 bottom sheet dialogs
+│   ├── SessionCard.tsx
+│   ├── ItemCard.tsx
+│   ├── PhotoPreview.tsx
+│   └── ...
+├── pages/            # 12 pages (lazy loaded)
+│   ├── HomePage.tsx
+│   ├── ScanPage.tsx
+│   ├── EditItemsPage.tsx
+│   ├── VotingPage.tsx
+│   ├── TipPage.tsx
+│   ├── SettlePage.tsx
+│   ├── JoinPage.tsx
+│   ├── VotingAdminPage.tsx
+│   ├── UnvotedItemsPage.tsx
+│   ├── PaymentQuotaPage.tsx
+│   ├── SessionHistoryPage.tsx
+│   └── ShareSessionPage.tsx
+├── api/              # client, types, queries
+├── hooks/            # useTelegram, useWebSocket
+└── lib/              # resize
+```
+
+**Маршруты (12):**
+```
+/                           HomePage
+/scan                       ScanPage
+/quota                      PaymentQuotaPage
+/session/:code              JoinPage
+/session/:code/edit         EditItemsPage
+/session/:code/vote         VotingPage
+/session/:code/tip          TipPage
+/session/:code/settle       SettlePage
+/session/:code/admin        VotingAdminPage
+/session/:code/unvoted      UnvotedItemsPage
+/session/:code/share        ShareSessionPage
+/session/:code/history      SessionHistoryPage
+```
+
+---
+
 ## Итого
 
 Переход на Mini App:
