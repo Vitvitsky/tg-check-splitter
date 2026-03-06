@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 
 interface QRInviteProps {
   inviteCode: string;
@@ -65,6 +66,13 @@ export default function QRInvite({ inviteCode, onClose }: QRInviteProps) {
           Поделитесь ссылкой, чтобы другие могли присоединиться и выбрать свои
           позиции
         </p>
+
+        {/* QR code */}
+        <div className="flex justify-center mb-4">
+          <div className="bg-white rounded-xl p-3">
+            <QRCodeSVG value={inviteLink} size={160} />
+          </div>
+        </div>
 
         {/* Invite link display */}
         <div className="p-3 rounded-xl bg-[var(--color-tg-secondary-bg)] mb-4">

@@ -19,24 +19,24 @@ export default function VotingPage() {
   useWebSocket(sessionId || null);
 
   const voteMutation = useVote(sessionId);
+  const currentUserId = user?.id ?? 0;
 
   const [optimisticVotes, setOptimisticVotes] = useState<Record<string, number>>({});
-  const [pendingItems, setPendingItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!session) return;
-    // Only clear optimistic votes for items that are NOT pending
+    // Clear optimistic votes only when server data matches (server caught up)
     setOptimisticVotes((prev) => {
       const next: Record<string, number> = {};
       for (const [id, qty] of Object.entries(prev)) {
-        if (pendingItems.has(id)) next[id] = qty;
+        const item = session.items.find((i) => i.id === id);
+        const serverQty = item?.votes.find((v) => v.user_tg_id === currentUserId)?.quantity ?? 0;
+        if (serverQty !== qty) next[id] = qty; // Keep: server hasn't caught up yet
       }
       return Object.keys(next).length === Object.keys(prev).length ? prev : next;
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
-
-  const currentUserId = user?.id ?? 0;
+  }, [session, currentUserId]);
 
   const getMyQuantity = useCallback(
     (item: Item): number => {
@@ -51,7 +51,6 @@ export default function VotingPage() {
       if (!sessionId) return;
 
       setOptimisticVotes((prev) => ({ ...prev, [itemId]: targetQty }));
-      setPendingItems((prev) => new Set(prev).add(itemId));
       haptic.selectionChanged();
 
       voteMutation.mutate({ itemId, quantity: targetQty }, {
@@ -62,9 +61,6 @@ export default function VotingPage() {
         onError: () => {
           setOptimisticVotes((prev) => { const next = { ...prev }; delete next[itemId]; return next; });
           haptic.notificationOccurred("error");
-        },
-        onSettled: () => {
-          setPendingItems((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
         },
       });
     },
@@ -160,7 +156,6 @@ export default function VotingPage() {
               <VoteItem
                 item={item}
                 myQuantity={getMyQuantity(item)}
-                isPending={pendingItems.has(item.id)}
                 currency={currency}
                 onClaim={() => handleClaim(item.id)}
                 onIncrement={() => handleIncrement(item.id)}
@@ -189,7 +184,6 @@ export default function VotingPage() {
 function VoteItem({
   item,
   myQuantity,
-  isPending,
   currency,
   onClaim,
   onIncrement,
@@ -197,7 +191,6 @@ function VoteItem({
 }: {
   item: Item;
   myQuantity: number;
-  isPending: boolean;
   currency: string;
   onClaim: () => void;
   onIncrement: () => void;
@@ -239,7 +232,6 @@ function VoteItem({
           <button
             type="button"
             onClick={onClaim}
-            disabled={isPending}
             className="px-4 py-1.5 rounded-[var(--radius-s)] border border-tg-accent/30 text-sm font-medium text-tg-accent active:bg-tg-accent/5"
           >
             Claim
