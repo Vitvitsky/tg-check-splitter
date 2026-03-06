@@ -1,16 +1,11 @@
 import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import {
-  useSession,
-  useShares,
-  useFinishVoting,
-  useSettle,
-} from "@/api/queries";
+import { useSession, useShares, useSettle } from "@/api/queries";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
+import { Header, Card, SectionLabel, Separator, Badge, Button, CtaBar } from "@/components/ui";
+import MemberCardUI from "@/components/ui/MemberCard";
 import type { Share } from "@/api/types";
-import ProgressBar from "@/components/ProgressBar";
-import ShareCard from "@/components/ShareCard";
 
 export default function SettlePage() {
   const { code } = useParams<{ code: string }>();
@@ -24,59 +19,35 @@ export default function SettlePage() {
   useWebSocket(sessionId || null);
 
   const { data: shares } = useShares(sessionId);
-  const finishMutation = useFinishVoting(sessionId);
   const settleMutation = useSettle(sessionId);
-
   const [settledShares, setSettledShares] = useState<Share[] | null>(null);
 
   const currentUserId = user?.id ?? 0;
   const isAdmin = session?.admin_tg_id === currentUserId;
 
-  const handleFinish = useCallback(async () => {
-    if (!sessionId) return;
-    haptic.impactOccurred("medium");
-
-    try {
-      await finishMutation.mutateAsync();
-      haptic.notificationOccurred("success");
-    } catch {
-      haptic.notificationOccurred("error");
-    }
-  }, [sessionId, finishMutation, haptic]);
-
   const handleSettle = useCallback(async () => {
     if (!sessionId) return;
     haptic.impactOccurred("heavy");
-
     try {
       const result = await settleMutation.mutateAsync();
       setSettledShares(result);
       haptic.notificationOccurred("success");
-    } catch {
-      haptic.notificationOccurred("error");
-    }
+    } catch { haptic.notificationOccurred("error"); }
   }, [sessionId, settleMutation, haptic]);
 
   if (isLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-tg-button)] border-t-transparent" />
+      <div className="flex min-h-screen items-center justify-center bg-tg-secondary-bg">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-tg-button border-t-transparent" />
       </div>
     );
   }
 
   if (isError || !session) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-base text-[var(--color-tg-destructive)]">
-          Не удалось загрузить сессию
-        </p>
-        <button
-          onClick={() => navigate("/")}
-          className="text-sm text-[var(--color-tg-link)] underline"
-        >
-          На главную
-        </button>
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center bg-tg-secondary-bg">
+        <p className="text-tg-destructive">Failed to load session</p>
+        <button onClick={() => navigate("/")} className="text-sm text-tg-link underline">Go Home</button>
       </div>
     );
   }
@@ -85,150 +56,106 @@ export default function SettlePage() {
   const displayShares = settledShares ?? shares ?? [];
   const totalAmount = displayShares.reduce((sum, s) => sum + s.grand_total, 0);
   const isSettled = session.status === "settled" || settledShares !== null;
+  const confirmedCount = members.filter((m) => m.confirmed).length;
 
-  // Non-admin waiting view
-  if (!isAdmin) {
-    return (
-      <div className="flex min-h-screen flex-col bg-[var(--color-tg-bg)]">
-        <div className="px-4 pb-2 pt-4">
-          <h1 className="text-xl font-bold text-[var(--color-tg-text)]">
-            Ожидание итогов
-          </h1>
-          <p className="mt-0.5 text-sm text-[var(--color-tg-hint)]">
-            Администратор подводит итоги
-          </p>
-        </div>
-
-        <div className="space-y-4 px-4 py-2">
-          <div className="rounded-xl bg-[var(--color-tg-section-bg)] p-4">
-            <ProgressBar members={members} />
-          </div>
-
-          {displayShares.length > 0 && (
-            <div className="space-y-2">
-              <h2 className="text-base font-semibold text-[var(--color-tg-text)]">
-                Итоги
-              </h2>
-              {displayShares.map((share) => (
-                <ShareCard
-                  key={share.user_tg_id}
-                  share={share}
-                  isCurrentUser={share.user_tg_id === currentUserId}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-      </div>
-    );
-  }
-
-  // Admin view
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--color-tg-bg)]">
-      {/* Header */}
-      <div className="px-4 pb-2 pt-4">
-        <h1 className="text-xl font-bold text-[var(--color-tg-text)]">
-          {isSettled ? "Итоги" : "Завершение"}
-        </h1>
-        <p className="mt-0.5 text-sm text-[var(--color-tg-hint)]">
-          {isSettled
-            ? "Счёт разделён!"
-            : "Дождитесь подтверждений и завершите"}
-        </p>
-      </div>
+    <div className="flex min-h-screen flex-col bg-tg-secondary-bg">
+      <Header title="Settlement" />
 
-      <div className="flex-1 space-y-4 px-4 pb-32">
-        {/* Progress */}
-        <div className="rounded-xl bg-[var(--color-tg-section-bg)] p-4">
-          <ProgressBar members={members} />
-        </div>
-
-        {/* Shares table */}
-        {displayShares.length > 0 && (
-          <div className="space-y-2">
-            <h2 className="text-base font-semibold text-[var(--color-tg-text)]">
-              Суммы к оплате
-            </h2>
-            {displayShares.map((share) => (
-              <ShareCard
-                key={share.user_tg_id}
-                share={share}
-                isCurrentUser={share.user_tg_id === currentUserId}
-              />
-            ))}
-
-            {/* Grand total */}
-            <div className="flex items-center justify-between rounded-xl bg-[var(--color-tg-secondary-bg)] p-3">
-              <span className="text-sm font-medium text-[var(--color-tg-hint)]">
-                Общий счёт
-              </span>
-              <span className="text-lg font-bold text-[var(--color-tg-text)]">
-                {totalAmount.toFixed(0)} &#8381;
-              </span>
-            </div>
+      <div className="flex-1 flex flex-col gap-4 p-4 pb-24">
+        {/* Status banner */}
+        {isSettled ? (
+          <div className="flex items-center justify-center gap-2 rounded-[var(--radius-m)] bg-success/10 p-3">
+            <svg className="w-5 h-5 text-success" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span className="text-sm font-medium text-success">
+              All {members.length} participants confirmed!
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center gap-2 rounded-[var(--radius-m)] bg-tg-button/10 p-3">
+            <span className="text-sm text-tg-accent">
+              {confirmedCount} / {members.length} confirmed
+            </span>
           </div>
         )}
 
-        {/* Settled confirmation */}
-        {isSettled && (
-          <div className="rounded-xl bg-green-50 p-4 text-center">
-            <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-green-100">
-              <svg
-                className="h-6 w-6 text-green-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                strokeWidth={2.5}
-                stroke="currentColor"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4.5 12.75l6 6 9-13.5"
-                />
-              </svg>
-            </div>
-            <p className="text-sm font-medium text-green-700">
-              Итоги отправлены всем участникам!
-            </p>
-          </div>
-        )}
-      </div>
-
-      {/* Sticky bottom actions */}
-      {!isSettled && (
-        <div className="fixed inset-x-0 bottom-0 z-20 space-y-2 border-t border-[var(--color-tg-secondary-bg)] bg-[var(--color-tg-bg)] px-4 pb-[env(safe-area-inset-bottom,8px)] pt-3">
-          {session.status === "voting" && (
-            <button
-              onClick={handleFinish}
-              disabled={finishMutation.isPending}
-              className="w-full rounded-xl bg-[var(--color-tg-secondary-bg)] py-2.5 text-sm font-semibold text-[var(--color-tg-text)] transition-all duration-150 active:scale-[0.98]"
-            >
-              {finishMutation.isPending ? (
-                <span className="inline-flex items-center gap-2">
-                  <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  Завершение...
-                </span>
-              ) : (
-                "Завершить голосование"
-              )}
-            </button>
+        {/* Participants */}
+        <SectionLabel>Participants</SectionLabel>
+        <Card>
+          {displayShares.length > 0 ? (
+            displayShares.map((share, i) => {
+              const member = members.find((m) => m.user_tg_id === share.user_tg_id);
+              const name = member?.display_name ?? "Unknown";
+              const isMe = share.user_tg_id === currentUserId;
+              const memberObj = members.find((m) => m.user_tg_id === share.user_tg_id);
+              const tipPct = memberObj?.tip_percent ?? 0;
+              const subtitle = `${tipPct}% tip`;
+              return (
+                <div key={share.user_tg_id}>
+                  {i > 0 && <Separator />}
+                  <MemberCardUI
+                    name={isMe ? `${name} (you)` : name}
+                    subtitle={subtitle}
+                    amount={Math.round(share.grand_total)}
+                    highlighted={isMe}
+                  />
+                </div>
+              );
+            })
+          ) : (
+            members.map((m, i) => {
+              const isMe = m.user_tg_id === currentUserId;
+              return (
+                <div key={m.id}>
+                  {i > 0 && <Separator />}
+                  <MemberCardUI
+                    name={isMe ? `${m.display_name} (you)` : m.display_name}
+                    subtitle={m.confirmed ? "Confirmed" : "Pending"}
+                    right={
+                      <Badge variant={m.confirmed ? "success" : "warning"}>
+                        {m.confirmed ? "Voted" : "Pending"}
+                      </Badge>
+                    }
+                    highlighted={isMe}
+                  />
+                </div>
+              );
+            })
           )}
-          <button
-            onClick={handleSettle}
+        </Card>
+
+        {/* Total */}
+        {displayShares.length > 0 && (
+          <Card className="flex items-center justify-between p-4">
+            <span className="text-base font-semibold text-tg-text">Check Total</span>
+            <span className="text-lg font-bold text-tg-accent">
+              {totalAmount.toLocaleString("ru-RU")} ₽
+            </span>
+          </Card>
+        )}
+      </div>
+
+      {/* CTA */}
+      {isAdmin && !isSettled && (
+        <CtaBar>
+          <Button
+            variant="main-action"
+            className="w-full"
             disabled={settleMutation.isPending}
-            className="w-full rounded-xl bg-[var(--color-tg-button)] py-3 text-base font-semibold text-[var(--color-tg-button-text)] shadow-md transition-all duration-150 active:scale-[0.98]"
+            onClick={handleSettle}
           >
             {settleMutation.isPending ? (
-              <span className="inline-flex items-center gap-2">
-                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                Расчёт...
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Settling...
               </span>
             ) : (
-              "Завершить и отправить итоги"
+              "Settle & Notify All"
             )}
-          </button>
-        </div>
+          </Button>
+        </CtaBar>
       )}
     </div>
   );

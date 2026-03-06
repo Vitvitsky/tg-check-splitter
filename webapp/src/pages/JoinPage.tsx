@@ -3,31 +3,23 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useSession, useJoinSession } from "@/api/queries";
 import { ApiError } from "@/api/client";
 import { useTelegramUser } from "@/hooks/useTelegram";
+import { Header, Card, Button, CtaBar } from "@/components/ui";
 
 export default function JoinPage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
   const user = useTelegramUser();
-  const {
-    data: session,
-    isLoading,
-    error,
-  } = useSession(code ?? "");
+  const { data: session, isLoading, error } = useSession(code ?? "");
   const joinMutation = useJoinSession();
 
-  // Check if current user is already a member
   const isAlreadyMember = useMemo(() => {
     if (!session || !user) return false;
     return session.members.some((m) => m.user_tg_id === user.id);
   }, [session, user]);
 
-  // Auto-redirect if already a member
   useEffect(() => {
     if (isAlreadyMember && code) {
-      const route =
-        session?.status === "created" || session?.status === "voting"
-          ? "vote"
-          : "settle";
+      const route = session?.status === "created" || session?.status === "voting" ? "vote" : "settle";
       navigate(`/session/${code}/${route}`, { replace: true });
     }
   }, [isAlreadyMember, code, session?.status, navigate]);
@@ -37,166 +29,109 @@ export default function JoinPage() {
     try {
       await joinMutation.mutateAsync(code);
       navigate(`/session/${code}/vote`, { replace: true });
-    } catch {
-      // error handled via joinMutation.error
-    }
+    } catch { /* handled by mutation */ }
   };
 
-  // Determine error state
   const apiError = error instanceof ApiError ? error : null;
   const isNotFound = apiError?.status === 404;
-  const isSettled =
-    session?.status === "settled" || session?.status === "closed";
+  const isSettled = session?.status === "settled" || session?.status === "closed";
 
-  // Calculate total
-  const totalAmount = useMemo(() => {
-    if (!session) return 0;
-    return session.items.reduce(
-      (sum, item) => sum + item.price * item.quantity,
-      0,
-    );
-  }, [session]);
-
-  // Find admin name
   const adminName = useMemo(() => {
     if (!session) return "";
-    const admin = session.members.find(
-      (m) => m.user_tg_id === session.admin_tg_id,
-    );
-    return admin?.display_name ?? "Организатор";
+    return session.members.find((m) => m.user_tg_id === session.admin_tg_id)?.display_name ?? "Organizer";
   }, [session]);
 
-  if (isLoading) {
-    return <LoadingState />;
+  if (isLoading || isAlreadyMember) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-tg-secondary-bg">
+        <div className="animate-spin h-8 w-8 border-2 border-tg-button border-t-transparent rounded-full" />
+      </div>
+    );
   }
 
   if (isNotFound || (!isLoading && !session)) {
-    return <ErrorState title="Чек не найден" subtitle="Возможно, ссылка устарела или была удалена." />;
+    return <ErrorScreen title="Session not found" subtitle="The link may have expired or been deleted." />;
   }
 
   if (error && !isNotFound) {
-    return <ErrorState title="Ошибка загрузки" subtitle="Не удалось загрузить данные чека. Попробуйте ещё раз." />;
+    return <ErrorScreen title="Loading error" subtitle="Could not load session data." />;
   }
 
   if (isSettled && !isAlreadyMember) {
-    return (
-      <ErrorState
-        title="Голосование завершено"
-        subtitle="Этот чек уже рассчитан. Присоединиться больше нельзя."
-      />
-    );
-  }
-
-  // If already member, we'll redirect via useEffect. Show nothing to avoid flicker.
-  if (isAlreadyMember) {
-    return <LoadingState />;
+    return <ErrorScreen title="Voting finished" subtitle="This session is already settled." />;
   }
 
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--color-tg-bg)] px-4">
-      <div className="w-full max-w-sm">
-        {/* Session info card */}
-        <div className="rounded-xl bg-[var(--color-tg-section-bg)] p-5 shadow-sm">
-          <h1 className="mb-4 text-center text-xl font-semibold text-[var(--color-tg-text)]">
-            Присоединиться к чеку
-          </h1>
+    <div className="flex min-h-screen flex-col bg-tg-secondary-bg">
+      <Header title="Join Session" showBack={false} />
 
-          <div className="flex flex-col gap-3">
-            <InfoRow label="Организатор" value={adminName} />
-            <InfoRow
-              label="Позиций"
-              value={String(session?.items.length ?? 0)}
-            />
-            <InfoRow
-              label="Участников"
-              value={String(session?.members.length ?? 0)}
-            />
-            {totalAmount > 0 && (
-              <InfoRow
-                label="Сумма"
-                value={`${totalAmount.toLocaleString("ru-RU")} ${session?.currency ?? "RUB"}`}
-              />
-            )}
+      <div className="flex-1 flex flex-col items-center justify-center gap-8 px-6">
+        {/* Success icon */}
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
+            <svg className="h-8 w-8 text-success" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
           </div>
+          <h2 className="text-xl font-bold text-tg-text">You're in!</h2>
+          <p className="text-sm text-tg-hint">You've joined the session</p>
         </div>
 
-        {/* Join button */}
-        <button
-          type="button"
-          onClick={handleJoin}
+        {/* Session info card */}
+        <Card className="w-full p-5 text-center">
+          <p className="text-lg font-semibold text-tg-text mb-1">
+            Session #{code}
+          </p>
+          <p className="text-sm text-tg-hint mb-4">Created by {adminName}</p>
+          <div className="flex justify-center gap-6 text-sm text-tg-hint">
+            <span>{session?.items.length ?? 0} items</span>
+            <span>{session?.members.length ?? 0} joined</span>
+          </div>
+        </Card>
+
+        <p className="text-sm text-tg-hint">Waiting for admin to start voting...</p>
+      </div>
+
+      <CtaBar>
+        <Button
+          variant="main-action"
+          className="w-full"
           disabled={joinMutation.isPending}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-tg-button)] px-4 py-3.5 text-base font-semibold text-[var(--color-tg-button-text)] shadow-sm transition-opacity active:opacity-80 disabled:opacity-60"
+          onClick={handleJoin}
         >
           {joinMutation.isPending ? (
-            <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-tg-button-text)] border-t-transparent" />
-          ) : null}
-          Присоединиться
-        </button>
+            <span className="flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Joining...
+            </span>
+          ) : (
+            "Start Voting"
+          )}
+        </Button>
+      </CtaBar>
 
-        {/* Join error */}
-        {joinMutation.error && (
-          <p className="mt-3 text-center text-sm text-[var(--color-tg-destructive)]">
-            Не удалось присоединиться. Попробуйте ещё раз.
-          </p>
-        )}
-      </div>
+      {joinMutation.error && (
+        <p className="fixed bottom-20 left-0 right-0 text-center text-sm text-tg-destructive">
+          Failed to join. Try again.
+        </p>
+      )}
     </div>
   );
 }
 
-/* ----------- Sub-components ----------- */
-
-function InfoRow({ label, value }: { label: string; value: string }) {
+function ErrorScreen({ title, subtitle }: { title: string; subtitle: string }) {
   return (
-    <div className="flex items-center justify-between">
-      <span className="text-sm text-[var(--color-tg-hint)]">{label}</span>
-      <span className="text-sm font-medium text-[var(--color-tg-text)]">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="flex min-h-screen items-center justify-center bg-[var(--color-tg-bg)]">
-      <div className="animate-spin h-8 w-8 border-2 border-[var(--color-tg-button)] border-t-transparent rounded-full" />
-    </div>
-  );
-}
-
-function ErrorState({
-  title,
-  subtitle,
-}: {
-  title: string;
-  subtitle: string;
-}) {
-  return (
-    <div className="flex min-h-screen flex-col items-center justify-center bg-[var(--color-tg-bg)] px-4">
-      <div className="w-full max-w-sm rounded-xl bg-[var(--color-tg-section-bg)] p-6 text-center shadow-sm">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[var(--color-tg-destructive)]/10">
-          <svg
-            width="28"
-            height="28"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-[var(--color-tg-destructive)]"
-          >
+    <div className="flex min-h-screen flex-col items-center justify-center bg-tg-secondary-bg px-6">
+      <Card className="w-full max-w-sm p-6 text-center">
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-tg-destructive/10">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-tg-destructive">
             <circle cx="12" cy="12" r="10" />
-            <path d="M15 9l-6 6" />
-            <path d="M9 9l6 6" />
+            <path d="M15 9l-6 6M9 9l6 6" />
           </svg>
         </div>
-        <h2 className="mb-1 text-lg font-semibold text-[var(--color-tg-text)]">
-          {title}
-        </h2>
-        <p className="text-sm text-[var(--color-tg-hint)]">{subtitle}</p>
-      </div>
+        <h2 className="text-lg font-semibold text-tg-text mb-1">{title}</h2>
+        <p className="text-sm text-tg-hint">{subtitle}</p>
+      </Card>
     </div>
   );
 }

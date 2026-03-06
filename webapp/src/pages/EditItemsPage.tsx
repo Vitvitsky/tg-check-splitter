@@ -1,28 +1,36 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSession, useUpdateItems } from "@/api/queries";
-import EditableItem from "@/components/EditableItem";
-import type { EditableItemData } from "@/components/EditableItem";
+import { Header, Card, ReceiptItem, Separator, Button, CtaBar } from "@/components/ui";
+import EditItemSheet from "@/components/sheets/EditItemSheet";
+import AddItemSheet from "@/components/sheets/AddItemSheet";
 import QRInvite from "@/components/QRInvite";
+import type { Item } from "@/api/types";
+
+interface LocalItem {
+  id: string;
+  name: string;
+  price: number;
+  quantity: number;
+}
 
 export default function EditItemsPage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
-
   const { data: session, isLoading, error: loadError } = useSession(code ?? "");
   const updateItems = useUpdateItems(session?.id ?? "");
 
-  // Local editable state
-  const [items, setItems] = useState<EditableItemData[]>([]);
+  const [items, setItems] = useState<LocalItem[]>([]);
   const [initialized, setInitialized] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<LocalItem | null>(null);
+  const [showAddSheet, setShowAddSheet] = useState(false);
 
-  // Sync session items into local state once
   useEffect(() => {
     if (session && !initialized) {
       setItems(
         session.items.map((item) => ({
+          id: item.id,
           name: item.name,
           price: item.price,
           quantity: item.quantity,
@@ -32,40 +40,35 @@ export default function EditItemsPage() {
     }
   }, [session, initialized]);
 
-  const handleItemChange = useCallback(
-    (index: number, updated: EditableItemData) => {
-      setItems((prev) => prev.map((item, i) => (i === index ? updated : item)));
-    },
-    [],
-  );
-
-  const handleItemDelete = useCallback((index: number) => {
-    setItems((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const handleAddItem = useCallback(() => {
-    setItems((prev) => [...prev, { name: "Новая позиция", price: 0, quantity: 1 }]);
-  }, []);
-
   const total = useMemo(
     () => items.reduce((sum, item) => sum + item.price * item.quantity, 0),
     [items],
   );
 
+  const handleEditSave = useCallback(
+    (id: string, name: string, price: number, quantity: number) => {
+      setItems((prev) =>
+        prev.map((item) => (item.id === id ? { ...item, name, price, quantity } : item)),
+      );
+    },
+    [],
+  );
+
+  const handleEditDelete = useCallback((id: string) => {
+    setItems((prev) => prev.filter((item) => item.id !== id));
+  }, []);
+
+  const handleAdd = useCallback((name: string, price: number, quantity: number) => {
+    setItems((prev) => [
+      ...prev,
+      { id: `new-${Date.now()}`, name, price, quantity },
+    ]);
+  }, []);
+
   const handleSave = useCallback(async () => {
     if (!session) return;
-
-    setError(null);
-
-    // Filter out invalid items
-    const validItems = items.filter(
-      (item) => item.name.trim() && item.price > 0,
-    );
-
-    if (validItems.length === 0) {
-      setError("Добавьте хотя бы одну позицию с ценой");
-      return;
-    }
+    const validItems = items.filter((item) => item.name.trim() && item.price > 0);
+    if (validItems.length === 0) return;
 
     try {
       await updateItems.mutateAsync(
@@ -77,29 +80,19 @@ export default function EditItemsPage() {
       );
       setShowInvite(true);
     } catch {
-      setError("Не удалось сохранить позиции. Попробуйте ещё раз.");
+      // handled by react-query
     }
   }, [session, items, updateItems]);
 
   const handleCloseInvite = useCallback(() => {
     setShowInvite(false);
-    if (code) {
-      navigate(`/session/${code}/vote`);
-    }
+    if (code) navigate(`/session/${code}/vote`);
   }, [code, navigate]);
-
-  const formatPrice = (price: number) =>
-    price.toLocaleString("ru-RU", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-
-  // --- Loading / Error states ---
 
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin h-8 w-8 border-2 border-[var(--color-tg-button)] border-t-transparent rounded-full" />
+        <div className="animate-spin h-8 w-8 border-2 border-tg-button border-t-transparent rounded-full" />
       </div>
     );
   }
@@ -107,96 +100,87 @@ export default function EditItemsPage() {
   if (loadError || !session) {
     return (
       <div className="flex flex-col items-center justify-center min-h-screen p-4 gap-4">
-        <p className="text-[var(--color-tg-destructive)] text-center">
-          Не удалось загрузить сессию
-        </p>
-        <button
-          type="button"
-          onClick={() => navigate("/")}
-          className="px-6 py-2 rounded-xl bg-[var(--color-tg-button)] text-[var(--color-tg-button-text)]
-                     font-medium active:opacity-80"
-        >
-          На главную
-        </button>
+        <p className="text-tg-destructive text-center">Failed to load session</p>
+        <Button variant="primary" onClick={() => navigate("/")}>Go Home</Button>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-tg-bg)] flex flex-col">
-      <div className="p-4 flex-1 pb-36">
-        <h1 className="text-xl font-bold mb-4">Редактирование позиций</h1>
+    <div className="min-h-screen bg-tg-secondary-bg flex flex-col">
+      <Header title="Review Receipt" rightIcon="pencil" />
 
-        {/* Error message */}
-        {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200">
-            <p className="text-red-700 text-sm">{error}</p>
-          </div>
-        )}
-
-        {/* Items list */}
-        <div className="space-y-2">
-          {items.map((item, index) => (
-            <EditableItem
-              key={index}
-              item={item}
-              index={index}
-              onChange={handleItemChange}
-              onDelete={handleItemDelete}
-            />
-          ))}
+      <div className="flex-1 flex flex-col gap-3 p-4 pb-24">
+        {/* Info bar */}
+        <div className="flex items-center justify-between py-2">
+          <span className="text-[13px] text-tg-hint">{items.length} items recognized</span>
+          <span className="text-[13px] font-medium text-tg-text">
+            Total: {total.toLocaleString("ru-RU")} ₽
+          </span>
         </div>
+
+        {/* Receipt items */}
+        <Card>
+          {items.map((item, i) => (
+            <div key={item.id}>
+              {i > 0 && <Separator />}
+              <ReceiptItem
+                name={item.name}
+                quantity={item.quantity}
+                price={item.price * item.quantity}
+                onClick={() => setEditingItem(item)}
+              />
+            </div>
+          ))}
+        </Card>
 
         {/* Add item button */}
         <button
           type="button"
-          onClick={handleAddItem}
-          className="mt-3 w-full py-3 rounded-xl border-2 border-dashed border-[var(--color-tg-hint)]/40
-                     flex items-center justify-center gap-2 text-[var(--color-tg-hint)]
-                     active:bg-[var(--color-tg-secondary-bg)] transition-colors"
+          onClick={() => setShowAddSheet(true)}
+          className="flex items-center gap-2 text-tg-accent text-sm font-medium py-2"
         >
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-          >
-            <line x1="8" y1="2" x2="8" y2="14" />
-            <line x1="2" y1="8" x2="14" y2="8" />
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M12 5v14M5 12h14" />
           </svg>
-          <span className="text-sm font-medium">Добавить позицию</span>
+          Add item
         </button>
       </div>
 
-      {/* Sticky bottom: total + save button */}
-      <div className="fixed bottom-0 left-0 right-0 bg-[var(--color-tg-bg)] border-t border-[var(--color-tg-hint)]/10 p-4 pb-8">
-        <div className="flex items-center justify-between mb-3">
-          <span className="font-bold">Итого</span>
-          <span className="font-bold">
-            {formatPrice(total)} {session.currency}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={handleSave}
+      {/* CTA */}
+      <CtaBar>
+        <Button
+          variant="main-action"
+          className="w-full"
           disabled={items.length === 0 || updateItems.isPending}
-          className="w-full py-3 rounded-xl font-medium transition-colors
-                     bg-[var(--color-tg-button)] text-[var(--color-tg-button-text)]
-                     disabled:opacity-40 active:opacity-80"
+          onClick={handleSave}
         >
           {updateItems.isPending ? (
-            <span className="flex items-center justify-center gap-2">
-              <span className="animate-spin h-4 w-4 border-2 border-[var(--color-tg-button-text)] border-t-transparent rounded-full" />
-              Сохранение...
+            <span className="flex items-center gap-2">
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+              Saving...
             </span>
           ) : (
-            "Начать голосование"
+            "Share & Start Voting"
           )}
-        </button>
-      </div>
+        </Button>
+      </CtaBar>
+
+      {/* Edit Item Sheet */}
+      <EditItemSheet
+        open={!!editingItem}
+        onClose={() => setEditingItem(null)}
+        item={editingItem as Item | null}
+        onSave={handleEditSave}
+        onDelete={handleEditDelete}
+      />
+
+      {/* Add Item Sheet */}
+      <AddItemSheet
+        open={showAddSheet}
+        onClose={() => setShowAddSheet(false)}
+        onAdd={handleAdd}
+      />
 
       {/* Invite modal */}
       {showInvite && code && (

@@ -53,4 +53,55 @@ LOW: Bot integration + polish (Этапы 5-6)
 - [x] Frontend screens (7 pages + 9 shared components — build passing)
 - [x] Bot integration (WebAppInfo buttons + push notifications via httpx)
 - [x] Tests passing (74/74 API tests)
+- [x] **UI Refactor** — переработка фронтенда по дизайну из `design/mini-app.pen` (12 UI components, 4 bottom sheets, 5 new pages, 7 refactored pages)
 - [ ] Ready for deployment
+
+## Phase: UI Refactor (Current)
+
+Рефакторинг webapp по 18 экранам из дизайна в Pencil (`design/mini-app.pen`).
+Дизайн-система: 31 компонент (Button, Input, Card, List, Badge, Chip, Avatar, Nav, BottomSheet, Snackbar).
+
+### Задачи
+
+#### 1. Shared UI Components (design system)
+Создать переиспользуемые компоненты по дизайн-системе из .pen:
+- `BottomSheet` — модальный лист снизу (используется в EditItem, AddItem, CustomTip, AddGuest)
+- `Header` — навигационный хедер с back/action кнопками
+- `BottomBar` — нижняя навигация (Home/People/Settings)
+- `Button` — Primary, Secondary, Destructive, Ghost, Icon, MainAction
+- `Badge` — Default, Success, Warning
+- `Chip/ChipActive` — для tip selection
+- `Avatar/AvatarSmall` — аватары участников
+- `Card` — секционная карточка
+- `ListItem/Separator` — элемент списка с разделителем
+- `ReceiptItem` — элемент чека (имя, qty, цена)
+- `MemberCard` — карточка участника (аватар, имя, сумма, бейджи)
+- `Snackbar` — уведомления
+
+#### 2. Refactor Existing Pages
+По дизайну переработать:
+- `HomePage` → Screen/Home (session cards, bottom nav, FAB)
+- `ScanPage` → Screen/ScanReceipt + Screen/OCRProcessing (camera area, session name input)
+- `EditItemsPage` → Screen/ReceiptReview + Screen/OCRWarning (receipt items list, warning banner, info bar)
+- `VotingPage` → Screen/Voting (participant avatars, claim/quantity controls)
+- `TipPage` → Screen/TipSummary (your items, tip chips, summary card)
+- `SettlePage` → Screen/Settlement (status banner, member list, total card)
+- `JoinPage` → Screen/JoinSession (success area, session info card)
+
+#### 3. New Pages
+- `VotingAdminPage` → Screen/VotingAdmin (progress card, member list with badges, reminder action)
+- `UnvotedItemsPage` → Screen/UnvotedItems (split equally / remove per item, reopen voting)
+- `PaymentQuotaPage` → Screen/PaymentQuota (limit info, plan cards, Stars purchase)
+- `SessionHistoryPage` → Screen/SessionHistory (settled session detail, participants, your items)
+- `ShareSessionPage` → Screen/ShareSession (QR code, invite link, share buttons)
+
+#### 4. New Bottom Sheets
+- `EditItemSheet` → Screen/EditItem (name, price, qty fields, delete/save)
+- `AddItemSheet` → Screen/AddItem (name, price, qty fields, add button)
+- `CustomTipSheet` → Screen/CustomTip (percentage input, calculated amount, apply)
+- `AddGuestSheet` → Screen/AddGuest (name input, dish checkboxes, add button)
+
+#### 5. Routing & Navigation
+- Добавить маршруты для новых страниц
+- Bottom navigation (Home/People/Settings)
+- Унифицировать Header с back button

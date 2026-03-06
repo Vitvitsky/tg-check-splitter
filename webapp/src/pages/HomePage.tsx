@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
-import { useMySessions, useQuota, useCreateSession } from "@/api/queries";
+import { useMySessions, useCreateSession } from "@/api/queries";
+import { Header, Card, SectionLabel, Separator } from "@/components/ui";
 import SessionCard from "@/components/SessionCard";
 
 const STATUS_ROUTE: Record<string, string> = {
@@ -11,8 +12,7 @@ const STATUS_ROUTE: Record<string, string> = {
 
 export default function HomePage() {
   const navigate = useNavigate();
-  const { data: sessions, isLoading: sessionsLoading } = useMySessions();
-  const { data: quota, isLoading: quotaLoading } = useQuota();
+  const { data: sessions, isLoading } = useMySessions();
   const createSession = useCreateSession();
 
   const handleNewCheck = async () => {
@@ -20,7 +20,7 @@ export default function HomePage() {
       const session = await createSession.mutateAsync("RUB");
       navigate(`/scan`, { state: { sessionId: session.id, inviteCode: session.invite_code } });
     } catch {
-      // mutation error handled by react-query
+      // handled by react-query
     }
   };
 
@@ -29,133 +29,90 @@ export default function HomePage() {
     navigate(`/session/${inviteCode}/${route}`);
   };
 
-  const isLoading = sessionsLoading || quotaLoading;
+  const active = sessions?.filter((s) => s.status !== "settled")
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) ?? [];
+  const history = sessions?.filter((s) => s.status === "settled")
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()) ?? [];
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--color-tg-bg)]">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 pb-2">
-        <h1 className="text-xl font-semibold text-[var(--color-tg-text)]">
-          Мои чеки
-        </h1>
-        {quota && !quotaLoading && (
-          <QuotaBadge
-            freeLeft={quota.free_scans_left}
-            paid={quota.paid_scans}
-          />
-        )}
-      </div>
+    <div className="flex min-h-screen flex-col bg-tg-secondary-bg">
+      <Header title="Check Splitter" showBack={false} />
 
-      {/* CTA Button */}
-      <div className="px-4 pb-3 pt-1">
-        <button
-          type="button"
-          onClick={handleNewCheck}
-          disabled={createSession.isPending}
-          className="flex w-full items-center justify-center gap-2 rounded-xl bg-[var(--color-tg-button)] px-4 py-3.5 text-base font-semibold text-[var(--color-tg-button-text)] shadow-sm transition-opacity active:opacity-80 disabled:opacity-60"
-        >
-          {createSession.isPending ? (
-            <span className="inline-block h-5 w-5 animate-spin rounded-full border-2 border-[var(--color-tg-button-text)] border-t-transparent" />
-          ) : (
-            <span className="text-lg">+</span>
-          )}
-          Новый чек
-        </button>
-      </div>
-
-      {/* Quota info */}
-      {quota && !quotaLoading && (
-        <div className="mx-4 mb-3 flex items-center gap-3 rounded-xl bg-[var(--color-tg-section-bg)] px-4 py-3">
-          <div className="flex flex-1 flex-col gap-0.5">
-            <span className="text-xs text-[var(--color-tg-hint)]">
-              Бесплатных сканов: {quota.free_scans_left}/3
-            </span>
-            {quota.paid_scans > 0 && (
-              <span className="text-xs text-[var(--color-tg-hint)]">
-                Оплаченных: {quota.paid_scans}
-              </span>
-            )}
-          </div>
-          <QuotaBar used={3 - quota.free_scans_left} total={3} />
-        </div>
-      )}
-
-      {/* Sessions list */}
-      <div className="flex flex-1 flex-col gap-2 px-4 pb-6">
+      <div className="flex-1 flex flex-col gap-4 p-4">
         {isLoading ? (
           <LoadingSkeleton />
         ) : sessions && sessions.length > 0 ? (
-          sessions
-            .slice()
-            .sort(
-              (a, b) =>
-                new Date(b.created_at).getTime() -
-                new Date(a.created_at).getTime(),
-            )
-            .map((s) => (
-              <SessionCard
-                key={s.id}
-                session={s}
-                onClick={() => handleSessionClick(s.invite_code, s.status)}
-              />
-            ))
+          <>
+            {active.length > 0 && (
+              <>
+                <SectionLabel>Active Sessions</SectionLabel>
+                <Card>
+                  {active.map((s, i) => (
+                    <div key={s.id}>
+                      {i > 0 && <Separator />}
+                      <SessionCard
+                        session={s}
+                        onClick={() => handleSessionClick(s.invite_code, s.status)}
+                      />
+                    </div>
+                  ))}
+                </Card>
+              </>
+            )}
+
+            {history.length > 0 && (
+              <>
+                <SectionLabel>History</SectionLabel>
+                <Card>
+                  {history.map((s, i) => (
+                    <div key={s.id}>
+                      {i > 0 && <Separator />}
+                      <SessionCard
+                        session={s}
+                        onClick={() => handleSessionClick(s.invite_code, s.status)}
+                      />
+                    </div>
+                  ))}
+                </Card>
+              </>
+            )}
+          </>
         ) : (
           <EmptyState />
         )}
       </div>
-    </div>
-  );
-}
 
-/* ----------- Sub-components ----------- */
-
-function QuotaBadge({
-  freeLeft,
-  paid,
-}: {
-  freeLeft: number;
-  paid: number;
-}) {
-  const total = freeLeft + paid;
-  return (
-    <span
-      className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-        total > 0
-          ? "bg-[var(--color-tg-button)]/10 text-[var(--color-tg-button)]"
-          : "bg-[var(--color-tg-destructive)]/10 text-[var(--color-tg-destructive)]"
-      }`}
-    >
-      {total > 0 ? `${total} скан.` : "Нет сканов"}
-    </span>
-  );
-}
-
-function QuotaBar({ used, total }: { used: number; total: number }) {
-  const pct = Math.min(100, Math.round((used / total) * 100));
-  return (
-    <div className="h-1.5 w-16 overflow-hidden rounded-full bg-[var(--color-tg-secondary-bg)]">
-      <div
-        className="h-full rounded-full bg-[var(--color-tg-button)] transition-all"
-        style={{ width: `${pct}%` }}
-      />
+      {/* FAB */}
+      <button
+        type="button"
+        onClick={handleNewCheck}
+        disabled={createSession.isPending}
+        className="fixed right-5 bottom-24 z-30 flex h-14 w-14 items-center justify-center rounded-full bg-tg-button text-white shadow-lg active:opacity-80 disabled:opacity-50"
+      >
+        {createSession.isPending ? (
+          <span className="h-6 w-6 animate-spin rounded-full border-2 border-white border-t-transparent" />
+        ) : (
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M14.5 4h-5L7 7H4a2 2 0 00-2 2v9a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2h-3l-2.5-3z" />
+            <circle cx="12" cy="13" r="3" />
+          </svg>
+        )}
+      </button>
     </div>
   );
 }
 
 function LoadingSkeleton() {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex flex-col gap-3">
       {[1, 2, 3].map((i) => (
-        <div
-          key={i}
-          className="flex animate-pulse items-center gap-3 rounded-xl bg-[var(--color-tg-section-bg)] p-4"
-        >
-          <div className="h-2.5 w-2.5 rounded-full bg-[var(--color-tg-secondary-bg)]" />
-          <div className="flex flex-1 flex-col gap-2">
-            <div className="h-3.5 w-24 rounded bg-[var(--color-tg-secondary-bg)]" />
-            <div className="h-3 w-40 rounded bg-[var(--color-tg-secondary-bg)]" />
+        <div key={i} className="flex animate-pulse items-center gap-3 rounded-[var(--radius-l)] bg-tg-section-bg p-4">
+          <div className="h-5 w-5 rounded-full bg-tg-secondary-bg" />
+          <div className="flex-1 flex flex-col gap-2">
+            <div className="h-4 w-28 rounded bg-tg-secondary-bg" />
+            <div className="h-3 w-40 rounded bg-tg-secondary-bg" />
           </div>
-          <div className="h-3 w-12 rounded bg-[var(--color-tg-secondary-bg)]" />
+          <div className="h-4 w-16 rounded bg-tg-secondary-bg" />
         </div>
       ))}
     </div>
@@ -165,32 +122,15 @@ function LoadingSkeleton() {
 function EmptyState() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16">
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--color-tg-secondary-bg)]">
-        <span className="text-3xl opacity-40">
-          <svg
-            width="32"
-            height="32"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            className="text-[var(--color-tg-hint)]"
-          >
-            <path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2" />
-            <rect x="9" y="3" width="6" height="4" rx="1" />
-            <path d="M9 14h6" />
-            <path d="M9 18h6" />
-          </svg>
-        </span>
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-tg-section-bg">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className="text-tg-hint">
+          <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+          <rect x="9" y="3" width="6" height="4" rx="1" />
+          <path d="M9 14h6M9 18h6" />
+        </svg>
       </div>
-      <span className="text-sm text-[var(--color-tg-hint)]">
-        У вас пока нет чеков
-      </span>
-      <span className="text-xs text-[var(--color-tg-hint)]">
-        Сфотографируйте чек, чтобы начать
-      </span>
+      <span className="text-sm text-tg-hint">No checks yet</span>
+      <span className="text-xs text-tg-hint">Take a photo of a receipt to get started</span>
     </div>
   );
 }

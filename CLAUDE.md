@@ -57,6 +57,40 @@ Monolith: aiogram 3.x (long polling) + SQLAlchemy 2.x (async) + PostgreSQL.
 - **All relationship loading is `selectin`**: Async-safe eager loading on all one-to-many relationships
 - **UUID primary keys** on all tables, `BigInteger` for Telegram user IDs
 
+## Mini App (webapp/)
+
+React 19 + Vite + Tailwind CSS 4 + @telegram-apps/sdk-react + TanStack Query.
+
+### Structure
+- `webapp/src/components/ui/` — design system components: BottomSheet, Header, Button, Avatar, Badge, Chip, Card, SectionLabel, Separator, ReceiptItem, MemberCard, CtaBar
+- `webapp/src/components/sheets/` — bottom sheet dialogs: EditItemSheet, AddItemSheet, CustomTipSheet, AddGuestSheet
+- `webapp/src/components/` — domain components: SessionCard, ItemCard, PhotoPreview, etc.
+- `webapp/src/pages/` — 12 pages (lazy loaded):
+  - HomePage, ScanPage, EditItemsPage, VotingPage, TipPage, SettlePage, JoinPage
+  - VotingAdminPage, UnvotedItemsPage, PaymentQuotaPage, SessionHistoryPage, ShareSessionPage
+- `webapp/src/api/` — client.ts (fetch + TMA auth), types.ts, queries.ts (TanStack Query hooks)
+- `webapp/src/hooks/` — useTelegram.ts, useWebSocket.ts (auto-reconnect + cache invalidation)
+- `webapp/src/lib/` — resize.ts (client-side image resize)
+
+### Design System
+Design source: `design/mini-app.pen` (Pencil). Tailwind CSS with `@theme` directive maps Telegram theme variables to custom properties. Background: `bg-tg-secondary-bg`, cards: `bg-tg-section-bg`, accent: `bg-tg-button`.
+
+### Routes
+```
+/                           HomePage
+/scan                       ScanPage
+/quota                      PaymentQuotaPage
+/session/:code              JoinPage
+/session/:code/edit         EditItemsPage
+/session/:code/vote         VotingPage
+/session/:code/tip          TipPage
+/session/:code/settle       SettlePage
+/session/:code/admin        VotingAdminPage
+/session/:code/unvoted      UnvotedItemsPage
+/session/:code/share        ShareSessionPage
+/session/:code/history      SessionHistoryPage
+```
+
 ## User Flow
 
 1. Admin sends photo(s) → OCR extracts items → admin confirms/edits

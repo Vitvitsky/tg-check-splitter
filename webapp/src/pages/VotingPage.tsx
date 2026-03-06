@@ -1,10 +1,10 @@
 import { useCallback, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSession, useVote, useMyShare } from "@/api/queries";
+import { useSession, useVote } from "@/api/queries";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
+import { Header, Card, Separator, Avatar, Button, CtaBar } from "@/components/ui";
 import type { Item } from "@/api/types";
-import ItemCard from "@/components/ItemCard";
 
 export default function VotingPage() {
   const { code } = useParams<{ code: string }>();
@@ -18,31 +18,20 @@ export default function VotingPage() {
   useWebSocket(sessionId || null);
 
   const voteMutation = useVote(sessionId);
-  const { data: myShare } = useMyShare(sessionId);
 
-  // Optimistic local quantity overrides
-  const [optimisticVotes, setOptimisticVotes] = useState<
-    Record<string, number>
-  >({});
+  const [optimisticVotes, setOptimisticVotes] = useState<Record<string, number>>({});
   const [pendingItems, setPendingItems] = useState<Set<string>>(new Set());
 
-  // Clear optimistic overrides when server data updates
   useEffect(() => {
-    if (session) {
-      setOptimisticVotes({});
-    }
+    if (session) setOptimisticVotes({});
   }, [session]);
 
   const currentUserId = user?.id ?? 0;
 
   const getMyQuantity = useCallback(
     (item: Item): number => {
-      if (optimisticVotes[item.id] !== undefined) {
-        return optimisticVotes[item.id]!;
-      }
-      return (
-        item.votes.find((v) => v.user_tg_id === currentUserId)?.quantity ?? 0
-      );
+      if (optimisticVotes[item.id] !== undefined) return optimisticVotes[item.id]!;
+      return item.votes.find((v) => v.user_tg_id === currentUserId)?.quantity ?? 0;
     },
     [currentUserId, optimisticVotes],
   );
@@ -50,51 +39,31 @@ export default function VotingPage() {
   const handleVote = useCallback(
     (itemId: string) => {
       if (!sessionId) return;
-
       const item = session?.items.find((i) => i.id === itemId);
       if (!item) return;
 
-      // Calculate optimistic next quantity
       const currentQty = getMyQuantity(item);
-      // Total claimed by others
       const othersTotal = item.votes
         .filter((v) => v.user_tg_id !== currentUserId)
         .reduce((sum, v) => sum + v.quantity, 0);
       const maxForMe = item.quantity - othersTotal;
       const nextQty = currentQty >= maxForMe ? 0 : currentQty + 1;
 
-      // Set optimistic state
       setOptimisticVotes((prev) => ({ ...prev, [itemId]: nextQty }));
       setPendingItems((prev) => new Set(prev).add(itemId));
-
       haptic.selectionChanged();
 
       voteMutation.mutate(itemId, {
         onSuccess: (result) => {
-          // Update optimistic with server truth
-          setOptimisticVotes((prev) => ({
-            ...prev,
-            [itemId]: result.quantity,
-          }));
-          if (result.overflow_prevented) {
-            haptic.notificationOccurred("warning");
-          }
+          setOptimisticVotes((prev) => ({ ...prev, [itemId]: result.quantity }));
+          if (result.overflow_prevented) haptic.notificationOccurred("warning");
         },
         onError: () => {
-          // Revert optimistic state
-          setOptimisticVotes((prev) => {
-            const next = { ...prev };
-            delete next[itemId];
-            return next;
-          });
+          setOptimisticVotes((prev) => { const next = { ...prev }; delete next[itemId]; return next; });
           haptic.notificationOccurred("error");
         },
         onSettled: () => {
-          setPendingItems((prev) => {
-            const next = new Set(prev);
-            next.delete(itemId);
-            return next;
-          });
+          setPendingItems((prev) => { const next = new Set(prev); next.delete(itemId); return next; });
         },
       });
     },
@@ -109,7 +78,7 @@ export default function VotingPage() {
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[var(--color-tg-button)] border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-tg-button border-t-transparent" />
       </div>
     );
   }
@@ -117,89 +86,116 @@ export default function VotingPage() {
   if (isError || !session) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-base text-[var(--color-tg-destructive)]">
-          Не удалось загрузить сессию
-        </p>
-        <button
-          onClick={() => navigate("/")}
-          className="text-sm text-[var(--color-tg-link)] underline"
-        >
-          На главную
-        </button>
+        <p className="text-tg-destructive">Failed to load session</p>
+        <button onClick={() => navigate("/")} className="text-sm text-tg-link underline">Go Home</button>
       </div>
     );
   }
 
-  const items = session.items;
-  const members = session.members;
-
-  // Count user's total selections
+  const { items, members } = session;
   const totalSelected = items.reduce((sum, item) => sum + getMyQuantity(item), 0);
+  const votedCount = members.filter((m) => items.some((it) => it.votes.some((v) => v.user_tg_id === m.user_tg_id && v.quantity > 0))).length;
 
   return (
-    <div className="flex min-h-screen flex-col bg-[var(--color-tg-bg)]">
-      {/* Header */}
-      <div className="sticky top-0 z-10 bg-[var(--color-tg-bg)] px-4 pb-3 pt-4">
-        <h1 className="text-xl font-bold text-[var(--color-tg-text)]">
-          Выберите блюда
-        </h1>
-        <p className="mt-0.5 text-sm text-[var(--color-tg-hint)]">
-          Нажмите, чтобы добавить порцию. Повторное нажатие увеличит количество.
-        </p>
+    <div className="flex min-h-screen flex-col bg-tg-secondary-bg">
+      <Header title="Select Your Dishes" />
+
+      <div className="flex-1 flex flex-col gap-3 p-4 pb-24">
+        {/* Participants row */}
+        <div className="flex items-center gap-2 py-1">
+          <div className="flex -space-x-1">
+            {members.slice(0, 5).map((m) => (
+              <Avatar key={m.id} name={m.display_name} size="sm" />
+            ))}
+          </div>
+          <span className="text-[13px] text-tg-hint">{votedCount} / {members.length} voted</span>
+        </div>
+
+        {/* Items */}
+        <Card>
+          {items.map((item, i) => (
+            <div key={item.id}>
+              {i > 0 && <Separator />}
+              <VoteItem
+                item={item}
+                myQuantity={getMyQuantity(item)}
+                isPending={pendingItems.has(item.id)}
+                onVote={() => handleVote(item.id)}
+              />
+            </div>
+          ))}
+        </Card>
       </div>
 
-      {/* Items list */}
-      <div className="flex-1 space-y-2 px-4 pb-32">
-        {items.length === 0 ? (
-          <div className="py-12 text-center text-sm text-[var(--color-tg-hint)]">
-            Позиции ещё не добавлены
+      {/* CTA */}
+      <CtaBar>
+        <Button
+          variant="main-action"
+          className="w-full"
+          disabled={totalSelected === 0}
+          onClick={handleNext}
+        >
+          Confirm Selection
+        </Button>
+      </CtaBar>
+    </div>
+  );
+}
+
+function VoteItem({
+  item,
+  myQuantity,
+  isPending,
+  onVote,
+}: {
+  item: Item;
+  myQuantity: number;
+  isPending: boolean;
+  onVote: () => void;
+}) {
+  const unitPrice = item.price / item.quantity;
+  const totalClaimed = item.votes.reduce((s, v) => s + v.quantity, 0);
+
+  return (
+    <div className="px-4 py-3">
+      <div className="flex items-center justify-between">
+        <div className="flex-1 min-w-0 mr-3">
+          <p className="text-[15px] font-medium text-tg-text truncate">{item.name}</p>
+          <p className="text-[13px] text-tg-hint">
+            {unitPrice.toLocaleString("ru-RU")} ₽ · {totalClaimed > 0 ? `claimed ${totalClaimed}/${item.quantity}` : "not claimed"}
+          </p>
+        </div>
+
+        {myQuantity > 0 ? (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onVote}
+              disabled={isPending}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-tg-accent/10 text-tg-accent"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14" /></svg>
+            </button>
+            <span className="w-6 text-center text-[15px] font-semibold text-tg-text">{myQuantity}</span>
+            <button
+              type="button"
+              onClick={onVote}
+              disabled={isPending}
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-tg-accent/10 text-tg-accent"
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+            </button>
           </div>
         ) : (
-          items.map((item) => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              members={members}
-              currentUserId={currentUserId}
-              myQuantity={getMyQuantity(item)}
-              onVote={handleVote}
-              isVoting={pendingItems.has(item.id)}
-            />
-          ))
-        )}
-      </div>
-
-      {/* Sticky bottom bar */}
-      <div className="fixed inset-x-0 bottom-0 z-20 border-t border-[var(--color-tg-secondary-bg)] bg-[var(--color-tg-bg)] px-4 pb-[env(safe-area-inset-bottom,8px)] pt-3">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <div className="text-lg font-bold text-[var(--color-tg-text)]">
-              {myShare
-                ? `${myShare.dishes_total.toFixed(0)} \u20BD`
-                : totalSelected > 0
-                  ? "..."
-                  : "0 \u20BD"}
-            </div>
-            <div className="text-xs text-[var(--color-tg-hint)]">
-              Ваш итог
-            </div>
-          </div>
           <button
-            onClick={handleNext}
-            disabled={totalSelected === 0}
-            className={`
-              rounded-xl px-6 py-2.5 text-sm font-semibold transition-all duration-150
-              active:scale-95
-              ${
-                totalSelected > 0
-                  ? "bg-[var(--color-tg-button)] text-[var(--color-tg-button-text)] shadow-md"
-                  : "bg-[var(--color-tg-secondary-bg)] text-[var(--color-tg-hint)] cursor-not-allowed"
-              }
-            `}
+            type="button"
+            onClick={onVote}
+            disabled={isPending}
+            className="px-4 py-1.5 rounded-[var(--radius-s)] border border-tg-accent/30 text-sm font-medium text-tg-accent active:bg-tg-accent/5"
           >
-            Далее &rarr; Чаевые
+            Claim
           </button>
-        </div>
+        )}
       </div>
     </div>
   );

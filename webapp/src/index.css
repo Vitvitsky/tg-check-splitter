@@ -1,26 +1,40 @@
 @import "tailwindcss";
 
-/* Map Telegram theme variables to custom properties */
-:root {
-  --color-tg-bg: var(--tg-theme-bg-color, #ffffff);
+@theme {
+  /* Telegram theme colors — mapped from TG SDK variables with design-system defaults */
+  --color-tg-bg: var(--tg-theme-bg-color, #FFFFFF);
   --color-tg-text: var(--tg-theme-text-color, #000000);
-  --color-tg-hint: var(--tg-theme-hint-color, #999999);
-  --color-tg-link: var(--tg-theme-link-color, #2678b6);
-  --color-tg-button: var(--tg-theme-button-color, #2678b6);
-  --color-tg-button-text: var(--tg-theme-button-text-color, #ffffff);
-  --color-tg-secondary-bg: var(--tg-theme-secondary-bg-color, #f0f0f0);
-  --color-tg-header-bg: var(--tg-theme-header-bg-color, #ffffff);
-  --color-tg-section-bg: var(--tg-theme-section-bg-color, #ffffff);
-  --color-tg-accent: var(--tg-theme-accent-text-color, #2678b6);
-  --color-tg-destructive: var(--tg-theme-destructive-text-color, #cc0000);
-  --color-tg-subtitle: var(--tg-theme-subtitle-text-color, #666666);
-  --color-tg-section-header: var(--tg-theme-section-header-text-color, #666666);
+  --color-tg-hint: var(--tg-theme-hint-color, #8E8E93);
+  --color-tg-link: var(--tg-theme-link-color, #3E88F7);
+  --color-tg-button: var(--tg-theme-button-color, #3E88F7);
+  --color-tg-button-text: var(--tg-theme-button-text-color, #FFFFFF);
+  --color-tg-secondary-bg: var(--tg-theme-secondary-bg-color, #F0F0F0);
+  --color-tg-header-bg: var(--tg-theme-header-bg-color, #FFFFFF);
+  --color-tg-section-bg: var(--tg-theme-section-bg-color, #FFFFFF);
+  --color-tg-accent: var(--tg-theme-accent-text-color, #3E88F7);
+  --color-tg-destructive: var(--tg-theme-destructive-text-color, #FF3B30);
+  --color-tg-subtitle: var(--tg-theme-subtitle-text-color, #8E8E93);
+  --color-tg-section-header: var(--tg-theme-section-header-text-color, #8E8E93);
+
+  /* Design system tokens */
+  --color-separator: var(--tg-theme-hint-color, #E5E5EA);
+  --color-success: #34C759;
+  --color-warning: #FF9500;
+  --color-overlay: rgba(0, 0, 0, 0.5);
+  --color-input-bg: var(--tg-theme-secondary-bg-color, #F2F2F7);
+
+  /* Radii */
+  --radius-s: 8px;
+  --radius-m: 12px;
+  --radius-l: 16px;
+  --radius-xl: 20px;
+  --radius-pill: 100px;
 }
 
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  background-color: var(--color-tg-bg);
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: var(--color-tg-secondary-bg);
   color: var(--color-tg-text);
   -webkit-font-smoothing: antialiased;
 }
@@ -31,14 +45,17 @@ body {
 
 /* Animations */
 @keyframes slide-up {
-  from {
-    transform: translateY(100%);
-  }
-  to {
-    transform: translateY(0);
-  }
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .animate-slide-up {
   animation: slide-up 0.3s ease-out;
+}
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
 }
