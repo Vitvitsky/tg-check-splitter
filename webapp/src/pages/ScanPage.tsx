@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useCreateSession, useUploadPhotos, useTriggerOcr } from "@/api/queries";
 import type { OcrResult } from "@/api/types";
 import { resizeImage } from "@/lib/resize";
+import { useWebSocket } from "@/hooks/useWebSocket";
 import { Header, Card, ReceiptItem, Separator, Button, CtaBar } from "@/components/ui";
 import PhotoPreview from "@/components/PhotoPreview";
+import { formatMoney } from "@/lib/currency";
 
 type Stage = "upload" | "processing" | "results";
 
@@ -13,13 +15,25 @@ export default function ScanPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
 
+  const location = useLocation();
+  const locationState = location.state as { sessionId?: string; inviteCode?: string } | null;
   const createSession = useCreateSession();
-  const [sessionId, setSessionId] = useState<string | null>(null);
-  const [inviteCode, setInviteCode] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(locationState?.sessionId ?? null);
+  const [inviteCode, setInviteCode] = useState<string | null>(locationState?.inviteCode ?? null);
   const [photos, setPhotos] = useState<File[]>([]);
   const [stage, setStage] = useState<Stage>("upload");
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ocrProgress, setOcrProgress] = useState<{ current: number; total: number } | null>(null);
+
+  const { lastEvent } = useWebSocket(sessionId);
+
+  useEffect(() => {
+    if (lastEvent?.type === "ocr_progress") {
+      const data = lastEvent.data as { current: number; total: number };
+      setOcrProgress(data);
+    }
+  }, [lastEvent]);
 
   useEffect(() => {
     if (sessionId) return;
@@ -92,9 +106,21 @@ export default function ScanPage() {
           </div>
           <div className="w-full max-w-xs">
             <div className="h-1.5 rounded-full bg-tg-secondary-bg overflow-hidden">
-              <div className="h-full bg-tg-button rounded-full animate-pulse" style={{ width: "60%" }} />
+              <div
+                className="h-full bg-tg-button rounded-full transition-all duration-300"
+                style={{
+                  width: ocrProgress && ocrProgress.total > 1
+                    ? `${(ocrProgress.current / ocrProgress.total) * 100}%`
+                    : "60%",
+                  ...(!(ocrProgress && ocrProgress.total > 1) && { animation: "pulse 2s infinite" }),
+                }}
+              />
             </div>
-            <p className="text-xs text-tg-hint text-center mt-2">Extracting items from photo...</p>
+            <p className="text-xs text-tg-hint text-center mt-2">
+              {ocrProgress && ocrProgress.total > 1
+                ? `Photo ${ocrProgress.current}/${ocrProgress.total}`
+                : "Extracting items from photo..."}
+            </p>
           </div>
         </div>
       </div>
@@ -119,7 +145,7 @@ export default function ScanPage() {
               <div>
                 <p className="text-sm font-medium text-warning">Total mismatch detected</p>
                 <p className="text-xs text-tg-hint mt-0.5">
-                  Items sum: {itemsTotal.toLocaleString("ru-RU")} ₽ vs Receipt: {ocrResult.total.toLocaleString("ru-RU")} ₽
+                  Items sum: {formatMoney(itemsTotal, ocrResult.currency)} vs Receipt: {formatMoney(ocrResult.total, ocrResult.currency)}
                 </p>
               </div>
             </div>
@@ -127,14 +153,14 @@ export default function ScanPage() {
 
           <div className="flex items-center justify-between py-2">
             <span className="text-[13px] text-tg-hint">{ocrResult.items.length} items recognized</span>
-            <span className="text-[13px] font-medium text-tg-text">Total: {ocrResult.total.toLocaleString("ru-RU")} ₽</span>
+            <span className="text-[13px] font-medium text-tg-text">Total: {formatMoney(ocrResult.total, ocrResult.currency)}</span>
           </div>
 
           <Card>
             {ocrResult.items.map((item, i) => (
               <div key={`${item.name}-${i}`}>
                 {i > 0 && <Separator />}
-                <ReceiptItem name={item.name} quantity={item.quantity} price={item.price * item.quantity} />
+                <ReceiptItem name={item.name} quantity={item.quantity} price={item.price * item.quantity} currency={ocrResult.currency} />
               </div>
             ))}
           </Card>

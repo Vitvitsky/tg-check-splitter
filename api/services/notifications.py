@@ -68,3 +68,23 @@ class NotificationService:
         """Notify admin when a new member joins."""
         text = f"{member_name} присоединился к чеку"
         await self.send_message(admin_tg_id, text)
+
+    async def send_vote_reminder(
+        self,
+        user_tg_id: int,
+        webapp_url: str,
+        invite_code: str,
+    ) -> bool:
+        """Send a voting reminder to a member."""
+        text = "Не забудьте выбрать свои позиции в чеке!"
+        reply_markup = {
+            "inline_keyboard": [
+                [
+                    {
+                        "text": "Голосовать",
+                        "web_app": {"url": f"{webapp_url}?startapp={invite_code}"},
+                    }
+                ]
+            ]
+        }
+        return await self.send_message(user_tg_id, text, reply_markup)

@@ -138,6 +138,43 @@ class SessionService:
         await self._db.commit()
         return 1, False
 
+    async def set_vote(
+        self, item_id: UUID, user_tg_id: int, quantity: int, max_qty: int
+    ) -> tuple[int, bool]:
+        """Set vote to exact quantity. Returns (new_quantity, overflow_prevented)."""
+        existing = await self._db.execute(
+            select(ItemVote).where(
+                ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id
+            )
+        )
+        vote = existing.scalar_one_or_none()
+
+        if quantity <= 0:
+            if vote:
+                await self._db.delete(vote)
+                await self._db.commit()
+            return 0, False
+
+        # Total claimed by others
+        total_result = await self._db.execute(
+            select(ItemVote.quantity).where(
+                ItemVote.item_id == item_id, ItemVote.user_tg_id != user_tg_id
+            )
+        )
+        others_claimed = sum(r[0] for r in total_result.all())
+        max_for_user = max_qty - others_claimed
+
+        if quantity > max_for_user:
+            return (vote.quantity if vote else 0), True
+
+        if vote:
+            vote.quantity = quantity
+        else:
+            vote = ItemVote(item_id=item_id, user_tg_id=user_tg_id, quantity=quantity)
+            self._db.add(vote)
+        await self._db.commit()
+        return quantity, False
+
     async def add_vote_all(self, item_id: UUID, user_tg_id: int, qty: int) -> None:
         """Add a vote with specific quantity (for split-equal)."""
         existing = await self._db.execute(

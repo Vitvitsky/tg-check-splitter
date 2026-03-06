@@ -113,6 +113,7 @@ class QuotaOut(BaseModel):
 
 class VoteIn(BaseModel):
     item_id: str
+    quantity: int | None = None  # None = cycle_vote, explicit int = set_vote
 
 
 class TipIn(BaseModel):
@@ -132,6 +133,10 @@ class ItemUpdateIn(BaseModel):
 
 class ItemsUpdateIn(BaseModel):
     items: list[ItemIn]
+
+
+class UnvotedDecisionIn(BaseModel):
+    decisions: dict[str, str]  # item_id → "split" | "remove"
 
 
 class SessionCreateIn(BaseModel):

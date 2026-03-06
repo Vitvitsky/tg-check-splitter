@@ -9,7 +9,8 @@ type WsEventType =
   | "member_unconfirmed"
   | "tip_changed"
   | "session_status"
-  | "items_updated";
+  | "items_updated"
+  | "ocr_progress";
 
 interface WsEvent {
   type: WsEventType;
@@ -44,9 +45,9 @@ export function useWebSocket(sessionId: string | null) {
       try {
         const parsed: WsEvent = JSON.parse(event.data as string);
         setLastEvent(parsed);
-        // Invalidate relevant queries
+        // Invalidate session queries (both by-id and by-invite-code)
         queryClient.invalidateQueries({
-          queryKey: ["session", sessionId],
+          queryKey: ["session"],
         });
         if (
           parsed.type === "tip_changed" ||

@@ -16,7 +16,7 @@ from api.schemas import (
     OcrResultOut,
     PhotoOut,
 )
-from api.ws import EVENT_ITEMS_UPDATED
+from api.ws import EVENT_ITEMS_UPDATED, EVENT_OCR_PROGRESS
 from bot.config import get_settings
 from bot.models.session import Session
 from bot.services.ocr import OcrService
@@ -94,7 +94,27 @@ async def trigger_ocr(
 
     settings = get_settings()
     ocr_service = OcrService(settings.openrouter_api_key, settings.openrouter_model)
-    result = await ocr_service.parse_receipt(photos_bytes)
+
+    # Send OCR progress via WebSocket for multi-photo receipts
+    manager = request.app.state.ws_manager
+    total_photos = len(photos_bytes)
+    if total_photos > 1:
+        await manager.broadcast(session_id, {
+            "type": EVENT_OCR_PROGRESS,
+            "data": {"current": 0, "total": total_photos},
+        })
+
+        results = []
+        for i, photo in enumerate(photos_bytes):
+            single = await ocr_service._parse_single_photo(photo)
+            results.append(single)
+            await manager.broadcast(session_id, {
+                "type": EVENT_OCR_PROGRESS,
+                "data": {"current": i + 1, "total": total_photos},
+            })
+        result = ocr_service._merge_results(results)
+    else:
+        result = await ocr_service.parse_receipt(photos_bytes)
 
     await svc.save_ocr_items(
         session_id,

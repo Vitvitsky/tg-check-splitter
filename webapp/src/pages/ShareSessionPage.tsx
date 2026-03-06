@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { useParams } from "react-router-dom";
+import { QRCodeSVG } from "qrcode.react";
 import { useSession } from "@/api/queries";
 import { Header, Card, SectionLabel, Button } from "@/components/ui";
 
@@ -52,20 +53,8 @@ export default function ShareSessionPage() {
         {/* QR card */}
         <Card className="w-full flex flex-col items-center gap-5 p-6">
           <SectionLabel>Scan to join</SectionLabel>
-          <div className="w-40 h-40 bg-tg-secondary-bg rounded-[var(--radius-l)] flex items-center justify-center">
-            {/* Placeholder QR — in production use a real QR library */}
-            <svg width="80" height="80" viewBox="0 0 100 100" fill="none">
-              <rect x="5" y="5" width="30" height="30" rx="4" stroke="currentColor" strokeWidth="4" />
-              <rect x="65" y="5" width="30" height="30" rx="4" stroke="currentColor" strokeWidth="4" />
-              <rect x="5" y="65" width="30" height="30" rx="4" stroke="currentColor" strokeWidth="4" />
-              <rect x="15" y="15" width="10" height="10" fill="currentColor" />
-              <rect x="75" y="15" width="10" height="10" fill="currentColor" />
-              <rect x="15" y="75" width="10" height="10" fill="currentColor" />
-              <rect x="45" y="45" width="10" height="10" fill="currentColor" />
-              <rect x="65" y="65" width="10" height="10" fill="currentColor" />
-              <rect x="85" y="65" width="10" height="10" fill="currentColor" />
-              <rect x="65" y="85" width="10" height="10" fill="currentColor" />
-            </svg>
+          <div className="w-40 h-40 bg-white rounded-[var(--radius-l)] flex items-center justify-center p-2">
+            <QRCodeSVG value={inviteLink} size={144} />
           </div>
           <p className="text-sm text-tg-hint">{session?.invite_code ? `Session #${code}` : "Loading..."}</p>
         </Card>

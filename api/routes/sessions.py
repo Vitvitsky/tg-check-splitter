@@ -27,6 +27,26 @@ from bot.services.session import SessionService
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])
 
 
+@router.delete("/history", status_code=200)
+async def clear_history(
+    user: TelegramUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Delete all settled sessions where the user is admin."""
+    result = await db.execute(select(SessionMember).where(SessionMember.user_tg_id == user.id))
+    memberships = result.scalars().all()
+
+    svc = SessionService(db)
+    deleted = 0
+    for membership in memberships:
+        session = await svc.get_session_by_id(membership.session_id)
+        if session and session.status == "settled" and session.admin_tg_id == user.id:
+            await db.delete(session)
+            deleted += 1
+    await db.commit()
+    return {"deleted": deleted}
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -152,6 +172,32 @@ async def join_session(
     await notifier.notify_member_joined(session.admin_tg_id, user.first_name)
 
     return member
+
+
+@router.post("/{session_id}/remind/{member_tg_id}", status_code=200)
+async def send_reminder(
+    session_id: UUID,
+    member_tg_id: int,
+    user: TelegramUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a voting reminder to a specific member (admin only)."""
+    svc = SessionService(db)
+    session = await svc.get_session_by_id(session_id)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+    _require_admin(session, user)
+
+    target = next((m for m in session.members if m.user_tg_id == member_tg_id), None)
+    if target is None:
+        raise HTTPException(404, "Member not found")
+
+    settings = get_settings()
+    notifier = NotificationService(settings.bot_token)
+    sent = await notifier.send_vote_reminder(
+        member_tg_id, settings.webapp_url, session.invite_code
+    )
+    return {"sent": sent}
 
 
 @router.post("/{session_id}/finish", status_code=200)

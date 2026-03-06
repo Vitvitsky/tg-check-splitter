@@ -86,13 +86,13 @@ export function useJoinSession() {
 export function useVote(sessionId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (itemId: string) =>
+    mutationFn: (args: { itemId: string; quantity?: number }) =>
       fetchApi<VoteResult>(`/api/sessions/${sessionId}/vote`, {
         method: "POST",
-        body: JSON.stringify({ item_id: itemId }),
+        body: JSON.stringify({ item_id: args.itemId, quantity: args.quantity }),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["session", sessionId] });
+      qc.invalidateQueries({ queryKey: ["session"] });
       qc.invalidateQueries({ queryKey: ["my-share", sessionId] });
     },
   });
@@ -121,7 +121,7 @@ export function useConfirm(sessionId: string) {
         method: "POST",
       }),
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["session", sessionId] }),
+      qc.invalidateQueries({ queryKey: ["session"] }),
   });
 }
 
@@ -133,7 +133,7 @@ export function useUnconfirm(sessionId: string) {
         method: "POST",
       }),
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["session", sessionId] }),
+      qc.invalidateQueries({ queryKey: ["session"] }),
   });
 }
 
@@ -160,7 +160,7 @@ export function useTriggerOcr(sessionId: string) {
         method: "POST",
       }),
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["session", sessionId] }),
+      qc.invalidateQueries({ queryKey: ["session"] }),
   });
 }
 
@@ -175,7 +175,7 @@ export function useUpdateItems(sessionId: string) {
         body: JSON.stringify({ items }),
       }),
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["session", sessionId] }),
+      qc.invalidateQueries({ queryKey: ["session"] }),
   });
 }
 
@@ -187,7 +187,7 @@ export function useDeleteItem(sessionId: string) {
         method: "DELETE",
       }),
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["session", sessionId] }),
+      qc.invalidateQueries({ queryKey: ["session"] }),
   });
 }
 
@@ -199,7 +199,7 @@ export function useFinishVoting(sessionId: string) {
         method: "POST",
       }),
     onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["session", sessionId] }),
+      qc.invalidateQueries({ queryKey: ["session"] }),
   });
 }
 
@@ -211,8 +211,49 @@ export function useSettle(sessionId: string) {
         method: "POST",
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["session", sessionId] });
+      qc.invalidateQueries({ queryKey: ["session"] });
       qc.invalidateQueries({ queryKey: ["shares", sessionId] });
     },
+  });
+}
+
+export function useResolveUnvoted(sessionId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (decisions: Record<string, "split" | "remove">) =>
+      fetchApi<unknown>(`/api/sessions/${sessionId}/resolve-unvoted`, {
+        method: "POST",
+        body: JSON.stringify({ decisions }),
+      }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["session"] }),
+  });
+}
+
+export function useRemind(sessionId: string) {
+  return useMutation({
+    mutationFn: (memberTgId: number) =>
+      fetchApi<{ sent: boolean }>(
+        `/api/sessions/${sessionId}/remind/${memberTgId}`,
+        { method: "POST" },
+      ),
+  });
+}
+
+export function useResetQuota() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetchApi<unknown>("/api/quota/reset", { method: "POST" }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["quota"] }),
+  });
+}
+
+export function useClearHistory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      fetchApiNoBody("/api/sessions/history", { method: "DELETE" }),
+    onSuccess: () =>
+      qc.invalidateQueries({ queryKey: ["sessions", "my"] }),
   });
 }

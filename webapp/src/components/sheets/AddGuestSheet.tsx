@@ -1,15 +1,17 @@
 import { useState } from "react";
 import { BottomSheet, Button } from "@/components/ui";
+import { formatMoney } from "@/lib/currency";
 import type { Item } from "@/api/types";
 
 interface AddGuestSheetProps {
   open: boolean;
   onClose: () => void;
   items: Item[];
+  currency?: string;
   onAdd: (name: string, itemIds: string[]) => void;
 }
 
-export default function AddGuestSheet({ open, onClose, items, onAdd }: AddGuestSheetProps) {
+export default function AddGuestSheet({ open, onClose, items, currency = "RUB", onAdd }: AddGuestSheetProps) {
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
 
@@ -58,7 +60,7 @@ export default function AddGuestSheet({ open, onClose, items, onAdd }: AddGuestS
                   className="w-5 h-5 rounded accent-[var(--color-tg-button)]"
                 />
                 <span className="flex-1 text-[15px] text-tg-text">{item.name}</span>
-                <span className="text-[15px] text-tg-hint">{item.price.toLocaleString("ru-RU")} ₽</span>
+                <span className="text-[15px] text-tg-hint">{formatMoney(item.price, currency)}</span>
               </label>
             ))}
           </div>

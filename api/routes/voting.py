@@ -13,7 +13,7 @@ from api.ws import (
     EVENT_VOTE_UPDATED,
 )
 from api.deps import get_db
-from api.schemas import ShareOut, TipIn, VoteIn
+from api.schemas import ShareOut, TipIn, UnvotedDecisionIn, VoteIn
 from bot.models.session import Session, SessionMember
 from bot.services.calculator import calculate_shares, calculate_user_share
 from bot.services.session import SessionService
@@ -71,9 +71,14 @@ async def vote(
         raise HTTPException(status_code=404, detail="Item not found in session")
 
     svc = SessionService(db)
-    quantity, overflow_prevented = await svc.cycle_vote(
-        item.id, user.id, item.quantity
-    )
+    if body.quantity is not None:
+        quantity, overflow_prevented = await svc.set_vote(
+            item.id, user.id, body.quantity, item.quantity
+        )
+    else:
+        quantity, overflow_prevented = await svc.cycle_vote(
+            item.id, user.id, item.quantity
+        )
 
     manager = request.app.state.ws_manager
     await manager.broadcast(session_id, {
@@ -246,3 +251,41 @@ async def get_my_share(
         tip_amount=float(tip_amount),
         grand_total=float(grand_total),
     )
+
+
+@router.post("/api/sessions/{session_id}/resolve-unvoted", status_code=200)
+async def resolve_unvoted(
+    session_id: str,
+    body: UnvotedDecisionIn,
+    request: Request,
+    user: TelegramUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Resolve unclaimed items: split equally among members or remove."""
+    svc = SessionService(db)
+    session = await svc.get_session_by_id(session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.admin_tg_id != user.id:
+        raise HTTPException(status_code=403, detail="Admin access required")
+
+    member_ids = [m.user_tg_id for m in session.members]
+
+    for item_id_str, action in body.decisions.items():
+        item = next((it for it in session.items if str(it.id) == item_id_str), None)
+        if item is None:
+            continue
+        if action == "remove":
+            from uuid import UUID
+            await svc.delete_item(UUID(item_id_str))
+        elif action == "split":
+            total_claimed = sum(v.quantity for v in item.votes)
+            remaining = item.quantity - total_claimed
+            if remaining > 0 and member_ids:
+                per_member = max(1, remaining // len(member_ids))
+                for i, uid in enumerate(member_ids):
+                    qty = per_member + (1 if i < remaining % len(member_ids) else 0)
+                    if qty > 0:
+                        await svc.add_vote_all(item.id, uid, qty)
+
+    return {"ok": True}

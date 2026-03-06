@@ -5,6 +5,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
 import { Header, Card, SectionLabel, Separator, Chip, ReceiptItem, Button, CtaBar } from "@/components/ui";
 import CustomTipSheet from "@/components/sheets/CustomTipSheet";
+import { formatMoney } from "@/lib/currency";
 
 const TIP_PRESETS = [0, 10, 15, 20];
 
@@ -65,6 +66,7 @@ export default function TipPage() {
   }, [sessionId, tipPercent, setTipMutation, confirmMutation, haptic]);
 
   const isAdmin = session?.admin_tg_id === currentUserId;
+  const currency = session?.currency ?? "RUB";
 
   const myItems = session?.items.filter((item) =>
     item.votes.some((v) => v.user_tg_id === currentUserId && v.quantity > 0),
@@ -99,7 +101,7 @@ export default function TipPage() {
         <p className="text-sm text-tg-hint">Waiting for admin to settle</p>
         {myShare && (
           <div className="mt-2 text-2xl font-bold text-tg-accent">
-            {myShare.grand_total.toFixed(0)} ₽
+            {formatMoney(Math.round(myShare.grand_total), currency)}
           </div>
         )}
         {isAdmin && (
@@ -126,7 +128,7 @@ export default function TipPage() {
             return (
               <div key={item.id}>
                 {i > 0 && <Separator />}
-                <ReceiptItem name={item.name} quantity={qty} price={Math.round(unitPrice * qty)} />
+                <ReceiptItem name={item.name} quantity={qty} price={Math.round(unitPrice * qty)} currency={currency} />
               </div>
             );
           })}
@@ -154,17 +156,17 @@ export default function TipPage() {
           <div className="flex flex-col gap-3">
             <div className="flex justify-between text-sm">
               <span className="text-tg-hint">Subtotal</span>
-              <span className="text-tg-text">{myShare ? `${myShare.dishes_total.toLocaleString("ru-RU")} ₽` : "..."}</span>
+              <span className="text-tg-text">{myShare ? formatMoney(myShare.dishes_total, currency) : "..."}</span>
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-tg-hint">Tip ({tipPercent}%)</span>
-              <span className="text-tg-text">{myShare ? `${myShare.tip_amount.toLocaleString("ru-RU")} ₽` : "..."}</span>
+              <span className="text-tg-text">{myShare ? formatMoney(myShare.tip_amount, currency) : "..."}</span>
             </div>
             <Separator />
             <div className="flex justify-between">
               <span className="text-base font-semibold text-tg-text">Total</span>
               <span className="text-lg font-bold text-tg-accent">
-                {myShare ? `${myShare.grand_total.toLocaleString("ru-RU")} ₽` : "..."}
+                {myShare ? formatMoney(myShare.grand_total, currency) : "..."}
               </span>
             </div>
           </div>
@@ -195,6 +197,7 @@ export default function TipPage() {
         open={showCustomTip}
         onClose={() => setShowCustomTip(false)}
         subtotal={myShare?.dishes_total ?? 0}
+        currency={currency}
         onApply={handleTipChange}
       />
     </div>

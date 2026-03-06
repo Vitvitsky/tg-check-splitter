@@ -5,6 +5,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
 import { Header, Card, SectionLabel, Separator, Badge, Button, CtaBar } from "@/components/ui";
 import MemberCardUI from "@/components/ui/MemberCard";
+import { formatMoney } from "@/lib/currency";
 import type { Share } from "@/api/types";
 
 export default function SettlePage() {
@@ -25,15 +26,24 @@ export default function SettlePage() {
   const currentUserId = user?.id ?? 0;
   const isAdmin = session?.admin_tg_id === currentUserId;
 
+  const unvotedItems = session?.items.filter((item) => {
+    const totalClaimed = item.votes.reduce((s, v) => s + v.quantity, 0);
+    return totalClaimed < item.quantity;
+  }) ?? [];
+
   const handleSettle = useCallback(async () => {
     if (!sessionId) return;
+    if (unvotedItems.length > 0) {
+      navigate(`/session/${code}/unvoted`);
+      return;
+    }
     haptic.impactOccurred("heavy");
     try {
       const result = await settleMutation.mutateAsync();
       setSettledShares(result);
       haptic.notificationOccurred("success");
     } catch { haptic.notificationOccurred("error"); }
-  }, [sessionId, settleMutation, haptic]);
+  }, [sessionId, unvotedItems.length, code, navigate, settleMutation, haptic]);
 
   if (isLoading) {
     return (
@@ -99,6 +109,7 @@ export default function SettlePage() {
                     name={isMe ? `${name} (you)` : name}
                     subtitle={subtitle}
                     amount={Math.round(share.grand_total)}
+                    currency={session.currency}
                     highlighted={isMe}
                   />
                 </div>
@@ -131,7 +142,7 @@ export default function SettlePage() {
           <Card className="flex items-center justify-between p-4">
             <span className="text-base font-semibold text-tg-text">Check Total</span>
             <span className="text-lg font-bold text-tg-accent">
-              {totalAmount.toLocaleString("ru-RU")} ₽
+              {formatMoney(totalAmount, session.currency)}
             </span>
           </Card>
         )}

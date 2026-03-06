@@ -1,11 +1,14 @@
+import { formatMoney } from "@/lib/currency";
+
 interface ReceiptItemProps {
   name: string;
   quantity: number;
   price: number;
+  currency?: string;
   onClick?: () => void;
 }
 
-export default function ReceiptItem({ name, quantity, price, onClick }: ReceiptItemProps) {
+export default function ReceiptItem({ name, quantity, price, currency = "RUB", onClick }: ReceiptItemProps) {
   return (
     <div
       className={`flex items-center justify-between px-4 py-3 ${onClick ? "cursor-pointer active:bg-tg-secondary-bg/50" : ""}`}
@@ -17,7 +20,7 @@ export default function ReceiptItem({ name, quantity, price, onClick }: ReceiptI
           <span className="text-xs font-medium text-tg-accent">x{quantity}</span>
         )}
         <span className="text-[15px] font-medium text-tg-text whitespace-nowrap">
-          {price.toLocaleString("ru-RU")} ₽
+          {formatMoney(price, currency)}
         </span>
       </div>
     </div>

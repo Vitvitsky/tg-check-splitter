@@ -4,6 +4,7 @@ import { useSession, useVote } from "@/api/queries";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
 import { Header, Card, Separator, Avatar, Button, CtaBar } from "@/components/ui";
+import { currencySymbol } from "@/lib/currency";
 import type { Item } from "@/api/types";
 
 export default function VotingPage() {
@@ -36,24 +37,15 @@ export default function VotingPage() {
     [currentUserId, optimisticVotes],
   );
 
-  const handleVote = useCallback(
-    (itemId: string) => {
+  const sendVote = useCallback(
+    (itemId: string, targetQty: number) => {
       if (!sessionId) return;
-      const item = session?.items.find((i) => i.id === itemId);
-      if (!item) return;
 
-      const currentQty = getMyQuantity(item);
-      const othersTotal = item.votes
-        .filter((v) => v.user_tg_id !== currentUserId)
-        .reduce((sum, v) => sum + v.quantity, 0);
-      const maxForMe = item.quantity - othersTotal;
-      const nextQty = currentQty >= maxForMe ? 0 : currentQty + 1;
-
-      setOptimisticVotes((prev) => ({ ...prev, [itemId]: nextQty }));
+      setOptimisticVotes((prev) => ({ ...prev, [itemId]: targetQty }));
       setPendingItems((prev) => new Set(prev).add(itemId));
       haptic.selectionChanged();
 
-      voteMutation.mutate(itemId, {
+      voteMutation.mutate({ itemId, quantity: targetQty }, {
         onSuccess: (result) => {
           setOptimisticVotes((prev) => ({ ...prev, [itemId]: result.quantity }));
           if (result.overflow_prevented) haptic.notificationOccurred("warning");
@@ -67,7 +59,42 @@ export default function VotingPage() {
         },
       });
     },
-    [sessionId, session, currentUserId, getMyQuantity, haptic, voteMutation],
+    [sessionId, haptic, voteMutation],
+  );
+
+  const handleClaim = useCallback(
+    (itemId: string) => {
+      sendVote(itemId, 1);
+    },
+    [sendVote],
+  );
+
+  const handleIncrement = useCallback(
+    (itemId: string) => {
+      const item = session?.items.find((i) => i.id === itemId);
+      if (!item) return;
+      const currentQty = getMyQuantity(item);
+      const othersTotal = item.votes
+        .filter((v) => v.user_tg_id !== currentUserId)
+        .reduce((sum, v) => sum + v.quantity, 0);
+      const maxForMe = item.quantity - othersTotal;
+      if (currentQty >= maxForMe) {
+        haptic.notificationOccurred("warning");
+        return;
+      }
+      sendVote(itemId, currentQty + 1);
+    },
+    [session, currentUserId, getMyQuantity, haptic, sendVote],
+  );
+
+  const handleDecrement = useCallback(
+    (itemId: string) => {
+      const item = session?.items.find((i) => i.id === itemId);
+      if (!item) return;
+      const currentQty = getMyQuantity(item);
+      sendVote(itemId, Math.max(0, currentQty - 1));
+    },
+    [session, getMyQuantity, sendVote],
   );
 
   const handleNext = useCallback(() => {
@@ -92,13 +119,18 @@ export default function VotingPage() {
     );
   }
 
-  const { items, members } = session;
+  const isAdmin = session.admin_tg_id === currentUserId;
+  const { items, members, currency } = session;
   const totalSelected = items.reduce((sum, item) => sum + getMyQuantity(item), 0);
   const votedCount = members.filter((m) => items.some((it) => it.votes.some((v) => v.user_tg_id === m.user_tg_id && v.quantity > 0))).length;
 
   return (
     <div className="flex min-h-screen flex-col bg-tg-secondary-bg">
-      <Header title="Select Your Dishes" />
+      <Header
+        title="Select Your Dishes"
+        rightIcon={isAdmin ? "pencil" : undefined}
+        onRightAction={isAdmin ? () => navigate(`/session/${code}/admin`) : undefined}
+      />
 
       <div className="flex-1 flex flex-col gap-3 p-4 pb-24">
         {/* Participants row */}
@@ -120,7 +152,10 @@ export default function VotingPage() {
                 item={item}
                 myQuantity={getMyQuantity(item)}
                 isPending={pendingItems.has(item.id)}
-                onVote={() => handleVote(item.id)}
+                currency={currency}
+                onClaim={() => handleClaim(item.id)}
+                onIncrement={() => handleIncrement(item.id)}
+                onDecrement={() => handleDecrement(item.id)}
               />
             </div>
           ))}
@@ -146,15 +181,22 @@ function VoteItem({
   item,
   myQuantity,
   isPending,
-  onVote,
+  currency,
+  onClaim,
+  onIncrement,
+  onDecrement,
 }: {
   item: Item;
   myQuantity: number;
   isPending: boolean;
-  onVote: () => void;
+  currency: string;
+  onClaim: () => void;
+  onIncrement: () => void;
+  onDecrement: () => void;
 }) {
   const unitPrice = item.price / item.quantity;
   const totalClaimed = item.votes.reduce((s, v) => s + v.quantity, 0);
+  const sym = currencySymbol(currency);
 
   return (
     <div className="px-4 py-3">
@@ -162,7 +204,7 @@ function VoteItem({
         <div className="flex-1 min-w-0 mr-3">
           <p className="text-[15px] font-medium text-tg-text truncate">{item.name}</p>
           <p className="text-[13px] text-tg-hint">
-            {unitPrice.toLocaleString("ru-RU")} ₽ · {totalClaimed > 0 ? `claimed ${totalClaimed}/${item.quantity}` : "not claimed"}
+            {unitPrice.toLocaleString("ru-RU")} {sym} · {totalClaimed > 0 ? `claimed ${totalClaimed}/${item.quantity}` : "not claimed"}
           </p>
         </div>
 
@@ -170,7 +212,7 @@ function VoteItem({
           <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={onVote}
+              onClick={onDecrement}
               disabled={isPending}
               className="w-8 h-8 flex items-center justify-center rounded-full bg-tg-accent/10 text-tg-accent"
             >
@@ -179,7 +221,7 @@ function VoteItem({
             <span className="w-6 text-center text-[15px] font-semibold text-tg-text">{myQuantity}</span>
             <button
               type="button"
-              onClick={onVote}
+              onClick={onIncrement}
               disabled={isPending}
               className="w-8 h-8 flex items-center justify-center rounded-full bg-tg-accent/10 text-tg-accent"
             >
@@ -189,7 +231,7 @@ function VoteItem({
         ) : (
           <button
             type="button"
-            onClick={onVote}
+            onClick={onClaim}
             disabled={isPending}
             className="px-4 py-1.5 rounded-[var(--radius-s)] border border-tg-accent/30 text-sm font-medium text-tg-accent active:bg-tg-accent/5"
           >

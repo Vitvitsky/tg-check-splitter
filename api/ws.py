@@ -16,6 +16,7 @@ EVENT_MEMBER_UNCONFIRMED = "member_unconfirmed"
 EVENT_TIP_CHANGED = "tip_changed"
 EVENT_SESSION_STATUS = "session_status"
 EVENT_ITEMS_UPDATED = "items_updated"
+EVENT_OCR_PROGRESS = "ocr_progress"
 
 
 class ConnectionManager:

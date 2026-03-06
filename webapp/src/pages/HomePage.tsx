@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useMySessions, useCreateSession } from "@/api/queries";
+import { useMySessions, useCreateSession, useClearHistory } from "@/api/queries";
 import { Header, Card, SectionLabel, Separator } from "@/components/ui";
 import SessionCard from "@/components/SessionCard";
 
@@ -7,13 +7,14 @@ const STATUS_ROUTE: Record<string, string> = {
   created: "edit",
   voting: "vote",
   closed: "settle",
-  settled: "settle",
+  settled: "history",
 };
 
 export default function HomePage() {
   const navigate = useNavigate();
   const { data: sessions, isLoading } = useMySessions();
   const createSession = useCreateSession();
+  const clearHistory = useClearHistory();
 
   const handleNewCheck = async () => {
     try {
@@ -62,7 +63,17 @@ export default function HomePage() {
 
             {history.length > 0 && (
               <>
-                <SectionLabel>History</SectionLabel>
+                <div className="flex items-center justify-between">
+                  <SectionLabel>History</SectionLabel>
+                  <button
+                    type="button"
+                    onClick={() => clearHistory.mutate()}
+                    disabled={clearHistory.isPending}
+                    className="text-xs text-tg-destructive font-medium px-2 py-1 active:opacity-70"
+                  >
+                    {clearHistory.isPending ? "Clearing..." : "Clear All"}
+                  </button>
+                </div>
                 <Card>
                   {history.map((s, i) => (
                     <div key={s.id}>

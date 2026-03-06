@@ -96,3 +96,40 @@ async def test_get_unvoted_items(svc, db_session):
     unvoted = await svc.get_unvoted_items(session.id)
     assert len(unvoted) == 1
     assert unvoted[0].name == "Soup"
+
+
+async def test_set_vote(svc, db_session):
+    """set_vote sets exact quantity."""
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
+    items = await svc.save_ocr_items(session.id, [{"name": "Pasta", "price": 500, "quantity": 3}])
+    item_id = items[0].id
+
+    # Set to 2
+    qty, overflow = await svc.set_vote(item_id, user_tg_id=222, quantity=2, max_qty=3)
+    assert qty == 2 and not overflow
+
+    # Decrease to 1
+    qty, overflow = await svc.set_vote(item_id, user_tg_id=222, quantity=1, max_qty=3)
+    assert qty == 1 and not overflow
+
+    # Set to 0 (remove)
+    qty, overflow = await svc.set_vote(item_id, user_tg_id=222, quantity=0, max_qty=3)
+    assert qty == 0 and not overflow
+
+
+async def test_set_vote_overflow(svc, db_session):
+    """set_vote prevents overflow."""
+    session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
+    items = await svc.save_ocr_items(session.id, [{"name": "Cake", "price": 300, "quantity": 2}])
+    item_id = items[0].id
+
+    # User A takes 1
+    await svc.set_vote(item_id, user_tg_id=222, quantity=1, max_qty=2)
+
+    # User B tries to take 2 — overflow (only 1 left)
+    qty, overflow = await svc.set_vote(item_id, user_tg_id=333, quantity=2, max_qty=2)
+    assert qty == 0 and overflow
+
+    # User B takes 1 — ok
+    qty, overflow = await svc.set_vote(item_id, user_tg_id=333, quantity=1, max_qty=2)
+    assert qty == 1 and not overflow

@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSession } from "@/api/queries";
+import { useSession, useResolveUnvoted } from "@/api/queries";
 import { Header, Card, SectionLabel, Button, CtaBar } from "@/components/ui";
 
 export default function UnvotedItemsPage() {
@@ -9,20 +9,26 @@ export default function UnvotedItemsPage() {
   const { data: session, isLoading } = useSession(code ?? "");
 
   const [decisions, setDecisions] = useState<Record<string, "split" | "remove">>({});
+  const resolveMutation = useResolveUnvoted(session?.id ?? "");
+
+  const currency = session?.currency ?? "RUB";
+  const currencySymbol = currency === "RUB" ? "₽" : currency;
 
   const unclaimedItems = session?.items.filter((item) => {
     const totalClaimed = item.votes.reduce((s, v) => s + v.quantity, 0);
-    return totalClaimed === 0;
+    return totalClaimed < item.quantity;
   }) ?? [];
 
   const handleDecision = useCallback((itemId: string, decision: "split" | "remove") => {
     setDecisions((prev) => ({ ...prev, [itemId]: decision }));
   }, []);
 
-  const handleContinue = useCallback(() => {
-    // TODO: send decisions to API
+  const handleContinue = useCallback(async () => {
+    if (Object.keys(decisions).length > 0 && session?.id) {
+      await resolveMutation.mutateAsync(decisions);
+    }
     navigate(`/session/${code}/settle`);
-  }, [navigate, code]);
+  }, [navigate, code, decisions, session?.id, resolveMutation]);
 
   if (isLoading) {
     return (
@@ -55,7 +61,7 @@ export default function UnvotedItemsPage() {
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[15px] font-medium text-tg-text">{item.name}</span>
                 <span className="text-[15px] font-semibold text-tg-text">
-                  {(item.price * item.quantity).toLocaleString("ru-RU")} ₽
+                  {(item.price * item.quantity).toLocaleString("ru-RU")} {currencySymbol}
                 </span>
               </div>
               <div className="flex gap-3">
@@ -99,8 +105,13 @@ export default function UnvotedItemsPage() {
       </div>
 
       <CtaBar>
-        <Button variant="main-action" className="w-full" onClick={handleContinue}>
-          Continue to Settlement
+        <Button
+          variant="main-action"
+          className="w-full"
+          disabled={resolveMutation.isPending}
+          onClick={handleContinue}
+        >
+          {resolveMutation.isPending ? "Saving..." : "Continue to Settlement"}
         </Button>
       </CtaBar>
     </div>

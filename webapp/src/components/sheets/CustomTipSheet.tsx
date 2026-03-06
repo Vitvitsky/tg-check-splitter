@@ -1,14 +1,16 @@
 import { useState } from "react";
 import { BottomSheet, Button } from "@/components/ui";
+import { formatMoney } from "@/lib/currency";
 
 interface CustomTipSheetProps {
   open: boolean;
   onClose: () => void;
   subtotal: number;
+  currency?: string;
   onApply: (percent: number) => void;
 }
 
-export default function CustomTipSheet({ open, onClose, subtotal, onApply }: CustomTipSheetProps) {
+export default function CustomTipSheet({ open, onClose, subtotal, currency = "RUB", onApply }: CustomTipSheetProps) {
   const [percent, setPercent] = useState("");
 
   const tipAmount = Math.round(subtotal * (parseFloat(percent) || 0) / 100);
@@ -40,7 +42,7 @@ export default function CustomTipSheet({ open, onClose, subtotal, onApply }: Cus
         </div>
 
         <p className="text-sm text-tg-subtitle">
-          Tip amount: {tipAmount.toLocaleString("ru-RU")} ₽
+          Tip amount: {formatMoney(tipAmount, currency)}
         </p>
 
         <Button variant="primary" className="w-full" onClick={handleApply}>

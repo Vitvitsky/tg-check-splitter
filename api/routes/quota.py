@@ -19,3 +19,16 @@ async def get_quota(
     svc = QuotaService(db, settings.free_scans_per_month)
     free_left, paid, reset_at = await svc.get_quota_info(user.id)
     return QuotaOut(free_scans_left=free_left, paid_scans=paid, reset_at=reset_at)
+
+
+@router.post("/reset", status_code=200)
+async def reset_quota(
+    user: TelegramUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset free scan counter for the current user."""
+    svc = QuotaService(db, get_settings().free_scans_per_month)
+    quota = await svc._get_or_create(user.id)
+    quota.free_scans_used = 0
+    await db.commit()
+    return {"ok": True}

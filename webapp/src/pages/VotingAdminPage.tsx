@@ -1,6 +1,6 @@
-import { useCallback } from "react";
+import { useCallback, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSession, useFinishVoting } from "@/api/queries";
+import { useSession, useFinishVoting, useRemind } from "@/api/queries";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
 import { Header, Card, SectionLabel, Separator, Badge, Button, CtaBar } from "@/components/ui";
@@ -18,8 +18,21 @@ export default function VotingAdminPage() {
   useWebSocket(sessionId || null);
 
   const finishMutation = useFinishVoting(sessionId);
+  const remindMutation = useRemind(sessionId);
 
   const currentUserId = user?.id ?? 0;
+  const [remindedIds, setRemindedIds] = useState<Set<number>>(new Set());
+
+  const handleRemind = useCallback(async (memberTgId: number) => {
+    haptic.impactOccurred("light");
+    try {
+      await remindMutation.mutateAsync(memberTgId);
+      setRemindedIds((prev) => new Set(prev).add(memberTgId));
+      haptic.notificationOccurred("success");
+    } catch {
+      haptic.notificationOccurred("error");
+    }
+  }, [remindMutation, haptic]);
 
   const handleEndVoting = useCallback(async () => {
     if (!sessionId) return;
@@ -104,12 +117,23 @@ export default function VotingAdminPage() {
         {/* Actions */}
         <SectionLabel>Actions</SectionLabel>
         {members.filter((m) => !items.some((it) => it.votes.some((v) => v.user_tg_id === m.user_tg_id && v.quantity > 0))).map((m) => (
-          <Card key={m.id} className="p-4 flex items-center gap-3">
+          <Card
+            key={m.id}
+            className="p-4 flex items-center gap-3 cursor-pointer active:opacity-70"
+            onClick={() => handleRemind(m.user_tg_id)}
+          >
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-tg-hint shrink-0">
               <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9" />
               <path d="M13.73 21a2 2 0 01-3.46 0" />
             </svg>
-            <span className="text-[15px] text-tg-text">Send Reminder to {m.display_name}</span>
+            <span className="text-[15px] text-tg-text">
+              {remindedIds.has(m.user_tg_id) ? `Reminder sent to ${m.display_name}` : `Send Reminder to ${m.display_name}`}
+            </span>
+            {remindedIds.has(m.user_tg_id) && (
+              <svg className="w-4 h-4 text-success ml-auto shrink-0" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+              </svg>
+            )}
           </Card>
         ))}
       </div>

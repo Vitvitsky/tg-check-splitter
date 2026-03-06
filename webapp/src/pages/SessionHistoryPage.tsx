@@ -4,6 +4,7 @@ import { useSession, useShares } from "@/api/queries";
 import { useTelegramUser } from "@/hooks/useTelegram";
 import { Header, Card, SectionLabel, Separator, ReceiptItem } from "@/components/ui";
 import MemberCardUI from "@/components/ui/MemberCard";
+import { formatMoney } from "@/lib/currency";
 
 export default function SessionHistoryPage() {
   const { code } = useParams<{ code: string }>();
@@ -62,7 +63,7 @@ export default function SessionHistoryPage() {
         {/* Info card */}
         <Card className="flex items-center justify-around p-4 text-center">
           <div>
-            <p className="text-lg font-bold text-tg-text">{totalAmount.toLocaleString("ru-RU")} ₽</p>
+            <p className="text-lg font-bold text-tg-text">{formatMoney(totalAmount, session.currency)}</p>
             <p className="text-xs text-tg-hint">Total</p>
           </div>
           <div>
@@ -90,6 +91,7 @@ export default function SessionHistoryPage() {
                   name={isMe ? `${name} (you)` : name}
                   subtitle={`${tipPct}% tip`}
                   amount={Math.round(share.grand_total)}
+                  currency={session.currency}
                   highlighted={isMe}
                 />
               </div>
@@ -109,7 +111,7 @@ export default function SessionHistoryPage() {
                 return (
                   <div key={item.id}>
                     {i > 0 && <Separator />}
-                    <ReceiptItem name={item.name} quantity={qty} price={Math.round(unitPrice * qty)} />
+                    <ReceiptItem name={item.name} quantity={qty} price={Math.round(unitPrice * qty)} currency={session.currency} />
                   </div>
                 );
               })}

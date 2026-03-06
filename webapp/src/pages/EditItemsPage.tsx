@@ -5,6 +5,7 @@ import { Header, Card, ReceiptItem, Separator, Button, CtaBar } from "@/componen
 import EditItemSheet from "@/components/sheets/EditItemSheet";
 import AddItemSheet from "@/components/sheets/AddItemSheet";
 import QRInvite from "@/components/QRInvite";
+import { formatMoney } from "@/lib/currency";
 import type { Item } from "@/api/types";
 
 interface LocalItem {
@@ -115,7 +116,7 @@ export default function EditItemsPage() {
         <div className="flex items-center justify-between py-2">
           <span className="text-[13px] text-tg-hint">{items.length} items recognized</span>
           <span className="text-[13px] font-medium text-tg-text">
-            Total: {total.toLocaleString("ru-RU")} ₽
+            Total: {formatMoney(total, session.currency)}
           </span>
         </div>
 
@@ -128,6 +129,7 @@ export default function EditItemsPage() {
                 name={item.name}
                 quantity={item.quantity}
                 price={item.price * item.quantity}
+                currency={session.currency}
                 onClick={() => setEditingItem(item)}
               />
             </div>
