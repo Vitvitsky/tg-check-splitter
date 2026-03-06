@@ -89,23 +89,59 @@ export default function TipPage() {
     );
   }
 
+  const confirmedCount = session?.members.filter((m) => m.confirmed).length ?? 0;
+  const totalMembers = session?.members.length ?? 0;
+
   if (isConfirmed) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-6 text-center bg-tg-secondary-bg">
-        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/15">
-          <svg className="h-8 w-8 text-success" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-        </div>
-        <h2 className="text-xl font-bold text-tg-text">Your choice confirmed!</h2>
-        <p className="text-sm text-tg-hint">Waiting for admin to settle</p>
-        {myShare && (
-          <div className="mt-2 text-2xl font-bold text-tg-accent">
-            {formatMoney(Math.round(myShare.grand_total), currency)}
+      <div className="flex min-h-screen flex-col items-center justify-center gap-8 p-6 bg-tg-secondary-bg">
+        {/* Success area */}
+        <div className="flex flex-col items-center gap-4">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-success/15">
+            <svg className="h-10 w-10 text-success" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+            </svg>
           </div>
+          <h2 className="text-[22px] font-bold text-tg-text">Selection confirmed!</h2>
+          <p className="text-[15px] text-tg-hint">Your vote has been submitted</p>
+        </div>
+
+        {/* Summary card */}
+        {myShare && (
+          <Card className="w-full p-5">
+            <div className="flex flex-col gap-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-tg-hint">Your items</span>
+                <span className="font-semibold text-tg-text">{myItems.length} dishes</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-tg-hint">Subtotal</span>
+                <span className="font-semibold text-tg-text">{formatMoney(myShare.dishes_total, currency)}</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-tg-hint">Tip ({tipPercent}%)</span>
+                <span className="font-semibold text-tg-text">{formatMoney(myShare.tip_amount, currency)}</span>
+              </div>
+              <Separator />
+              <div className="flex justify-between">
+                <span className="text-base font-bold text-tg-text">Total</span>
+                <span className="text-base font-bold text-tg-accent">{formatMoney(myShare.grand_total, currency)}</span>
+              </div>
+            </div>
+          </Card>
         )}
+
+        {/* Waiting area */}
+        <div className="flex flex-col items-center gap-2">
+          <svg className="w-5 h-5 text-tg-hint" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+          <p className="text-sm text-tg-hint">Waiting for others to confirm...</p>
+          <p className="text-[13px] font-medium text-tg-hint">{confirmedCount} of {totalMembers} confirmed</p>
+        </div>
+
         {isAdmin && (
-          <Button variant="primary" onClick={() => navigate(`/session/${code}/settle`)} className="mt-4">
+          <Button variant="primary" onClick={() => navigate(`/session/${code}/settle`)} className="w-full">
             Go to Settlement
           </Button>
         )}

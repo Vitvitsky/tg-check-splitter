@@ -24,7 +24,16 @@ export default function VotingPage() {
   const [pendingItems, setPendingItems] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    if (session) setOptimisticVotes({});
+    if (!session) return;
+    // Only clear optimistic votes for items that are NOT pending
+    setOptimisticVotes((prev) => {
+      const next: Record<string, number> = {};
+      for (const [id, qty] of Object.entries(prev)) {
+        if (pendingItems.has(id)) next[id] = qty;
+      }
+      return Object.keys(next).length === Object.keys(prev).length ? prev : next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session]);
 
   const currentUserId = user?.id ?? 0;
@@ -213,8 +222,7 @@ function VoteItem({
             <button
               type="button"
               onClick={onDecrement}
-              disabled={isPending}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-tg-accent/10 text-tg-accent"
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-tg-accent/10 text-tg-accent active:bg-tg-accent/20"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M5 12h14" /></svg>
             </button>
@@ -222,8 +230,7 @@ function VoteItem({
             <button
               type="button"
               onClick={onIncrement}
-              disabled={isPending}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-tg-accent/10 text-tg-accent"
+              className="w-8 h-8 flex items-center justify-center rounded-full bg-tg-accent/10 text-tg-accent active:bg-tg-accent/20"
             >
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
             </button>
