@@ -22,6 +22,7 @@ COPY bot/ bot/
 COPY api/ api/
 COPY alembic/ alembic/
 COPY alembic.ini ./
+COPY locales/ locales/
 
 # Copy built frontend
 COPY --from=frontend /build/dist/ webapp/dist/

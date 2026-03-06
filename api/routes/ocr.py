@@ -20,6 +20,7 @@ from api.ws import EVENT_ITEMS_UPDATED, EVENT_OCR_PROGRESS
 from bot.config import get_settings
 from bot.models.session import Session
 from bot.services.ocr import OcrService
+from bot.services.quota import QuotaService
 from bot.services.session import SessionService
 
 router = APIRouter(prefix="/api/sessions/{session_id}", tags=["ocr"])
@@ -80,6 +81,17 @@ async def trigger_ocr(
     session = await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
 
+    settings = get_settings()
+    quota_svc = QuotaService(db, settings.free_scans_per_month)
+    if not await quota_svc.can_scan(user.id):
+        raise HTTPException(
+            402,
+            detail="quota_exhausted",
+        )
+    used = await quota_svc.use_scan(user.id)
+    if not used:
+        raise HTTPException(402, detail="quota_exhausted")
+
     if not hasattr(request.app.state, "photo_storage"):
         request.app.state.photo_storage = {}
 
@@ -90,9 +102,11 @@ async def trigger_ocr(
             photos_bytes.append(raw)
 
     if not photos_bytes:
-        raise HTTPException(400, "No photos available for OCR")
+        raise HTTPException(
+            400,
+            detail="No photos available for OCR. Try uploading again.",
+        )
 
-    settings = get_settings()
     ocr_service = OcrService(settings.openrouter_api_key, settings.openrouter_model)
 
     # Send OCR progress via WebSocket for multi-photo receipts

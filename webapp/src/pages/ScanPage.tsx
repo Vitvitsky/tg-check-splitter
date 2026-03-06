@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useCreateSession, useUploadPhotos, useTriggerOcr } from "@/api/queries";
+import { ApiError } from "@/api/client";
 import type { OcrResult } from "@/api/types";
 import { resizeImage } from "@/lib/resize";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -75,8 +76,18 @@ export default function ScanPage() {
       const result = await triggerOcr.mutateAsync();
       setOcrResult(result);
       setStage("results");
-    } catch {
-      setError("Failed to recognize receipt. Try again.");
+    } catch (err) {
+      const msg =
+        err instanceof ApiError
+          ? err.status === 402
+            ? "Лимит сканов исчерпан. Купите дополнительные в боте."
+            : typeof (err.data as { detail?: string })?.detail === "string"
+              ? (err.data as { detail: string }).detail
+              : err.status === 401
+                ? "Откройте мини-приложение из Telegram."
+                : "Не удалось распознать чек. Попробуйте снова."
+          : "Не удалось распознать чек. Попробуйте снова.";
+      setError(msg);
       setStage("upload");
     }
   }, [sessionId, photos, uploadPhotos, triggerOcr]);
