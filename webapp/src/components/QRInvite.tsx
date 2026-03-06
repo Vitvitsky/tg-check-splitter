@@ -9,7 +9,7 @@ interface QRInviteProps {
 export default function QRInvite({ inviteCode, onClose }: QRInviteProps) {
   const [copied, setCopied] = useState(false);
 
-  const botUsername = "check_splitter_bot"; // TODO: make configurable
+  const botUsername = import.meta.env.VITE_BOT_USERNAME || "serge_w_check_splitter_bot";
   const inviteLink = `https://t.me/${botUsername}?start=${inviteCode}`;
 
   const handleCopy = useCallback(async () => {

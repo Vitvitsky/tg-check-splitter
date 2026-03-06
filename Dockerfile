@@ -4,6 +4,8 @@ WORKDIR /build
 COPY webapp/package.json webapp/package-lock.json ./
 RUN npm ci
 COPY webapp/ .
+ARG VITE_BOT_USERNAME=serge_w_check_splitter_bot
+ENV VITE_BOT_USERNAME=$VITE_BOT_USERNAME
 RUN npm run build
 
 # Stage 2: Python runtime

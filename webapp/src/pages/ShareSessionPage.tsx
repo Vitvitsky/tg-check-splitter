@@ -9,7 +9,7 @@ export default function ShareSessionPage() {
   const { data: session, isLoading } = useSession(code ?? "");
   const [copied, setCopied] = useState(false);
 
-  const botUsername = "check_splitter_bot";
+  const botUsername = import.meta.env.VITE_BOT_USERNAME || "serge_w_check_splitter_bot";
   const inviteLink = `https://t.me/${botUsername}?start=${code}`;
 
   const handleCopy = useCallback(async () => {
