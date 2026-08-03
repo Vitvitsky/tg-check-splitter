@@ -75,8 +75,8 @@ Multi-stage сборка: Node.js собирает фронтенд, Python-об
 | Переменная | Тип | По умолчанию | Описание |
 |---|---|---|---|
 | `BOT_TOKEN` | str | — | Токен от [@BotFather](https://t.me/BotFather) |
-| `OPENROUTER_API_KEY` | str | — | API-ключ [OpenRouter](https://openrouter.ai) |
-| `OPENROUTER_MODEL` | str | `anthropic/claude-sonnet-4-5-20250929` | Vision-модель для OCR |
+| `ZAI_API_KEY` | str | — | API-ключ [Z.AI](https://z.ai) |
+| `ZAI_MODEL` | str | `glm-4.6v` | Vision-модель для OCR |
 | `DATABASE_URL` | str | — | PostgreSQL URL (`postgresql+asyncpg://user:password@localhost:5433/checksplitter`) |
 | `WEBAPP_URL` | str | `http://localhost:5173` | Базовый URL Mini App |
 | `FREE_SCANS_PER_MONTH` | int | `3` | Лимит бесплатных сканирований в месяц |

@@ -9,7 +9,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-OPENROUTER_URL = "https://openrouter.ai/api/v1/chat/completions"
+ZAI_URL = "https://api.z.ai/api/paas/v4/chat/completions"
 
 SYSTEM_PROMPT = """\
 You are a receipt parser. Extract all line items from the receipt photo.
@@ -74,7 +74,7 @@ class OcrService:
 
         async with httpx.AsyncClient(timeout=120) as client:
             response = await client.post(
-                OPENROUTER_URL,
+                ZAI_URL,
                 headers={"Authorization": f"Bearer {self._api_key}"},
                 json={
                     "model": self._model,

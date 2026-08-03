@@ -111,7 +111,7 @@ async def trigger_ocr(
             detail="No photos available for OCR. Try uploading again.",
         )
 
-    ocr_service = OcrService(settings.openrouter_api_key, settings.openrouter_model)
+    ocr_service = OcrService(settings.zai_api_key, settings.zai_model)
 
     # Send OCR progress via WebSocket for multi-photo receipts
     manager = request.app.state.ws_manager

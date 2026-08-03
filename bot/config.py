@@ -3,8 +3,8 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     bot_token: str
-    openrouter_api_key: str
-    openrouter_model: str = "anthropic/claude-sonnet-4-5-20250929"
+    zai_api_key: str
+    zai_model: str = "glm-4.6v"
     database_url: str
     webapp_url: str = "http://localhost:5173"
     free_scans_per_month: int = 3

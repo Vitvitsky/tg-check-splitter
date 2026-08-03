@@ -57,7 +57,7 @@ def test_settings():
 
     return Settings(
         bot_token=TEST_BOT_TOKEN,
-        openrouter_api_key="test-key",
+        zai_api_key="test-key",
         database_url="sqlite+aiosqlite://",
         webapp_url="http://localhost:5173",
     )

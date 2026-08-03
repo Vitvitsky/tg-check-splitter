@@ -98,7 +98,7 @@ async def start_ocr(callback: CallbackQuery, state: FSMContext, db: AsyncSession
 
     # Run OCR
     settings = get_settings()
-    ocr = OcrService(api_key=settings.openrouter_api_key, model=settings.openrouter_model)
+    ocr = OcrService(api_key=settings.zai_api_key, model=settings.zai_model)
     try:
         result = await ocr.parse_receipt(photos_bytes)
     except Exception as e:
