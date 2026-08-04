@@ -227,6 +227,68 @@ serves `index.html` from a catch-all `GET /{spa_path:path}` instead, with `/asse
 mounted separately and `/api/...` explicitly kept as a 404. Bot buttons and push
 notifications rely on this and link to real routes.
 
+## The Telegram SDK throws mid-handler unless it is initialised
+
+`main.tsx` must call **both** `init()` and `restoreInitData()`. They are separate steps:
+`init()` only configures the environment and attaches event receivers, so `initDataUser`
+stays empty until `restoreInitData()` runs.
+
+Skipping them does not fail loudly. Every `@telegram-apps/sdk` v2 function is wrapped in a
+guard that **throws** when the version signal is unset (`ERR_NOT_INITIALIZED`) or when the
+client does not support the method (`ERR_NOT_SUPPORTED` — haptics on Desktop). The throw
+is synchronous inside the click handler and kills everything after it:
+
+```js
+haptic.impactOccurred("light");     // throws
+navigate(`/session/${code}/tip`);   // never runs — "the button does nothing"
+```
+
+Three separate bug reports on 2026-08-04 came from this one omission: Confirm Selection
+did nothing, `+/-` moved but no `POST /vote` ever left the device (optimistic state
+updates *before* the throw, `mutate` is called *after* it), and a member could not claim
+the second of two portions.
+
+Two rules follow. **Never put an SDK call before the action it decorates** — haptics are
+wrapped in `useHaptic()` so they can only no-op. And **never let a missing Telegram
+identity fall back to a plausible number**: `user?.id ?? 0` turned a broken SDK into wrong
+billing arithmetic instead of an error, because `votes.filter(v => v.user_tg_id !== 0)`
+excluded nobody and counted the user's own claim as someone else's. Where a per-user cap
+is computed, prefer "everything minus mine" over filtering by id, and let the server —
+which knows the real caller — hold the real bound.
+
+## react-query: the mutation object is a new reference every render
+
+`useMutation` returns `{ ...result, mutate, mutateAsync }` — a fresh object literal on each
+render. `mutate` itself is `useCallback`-wrapped and stable.
+
+So a mutation object in a `useEffect` dependency array is a self-feeding loop. The debounced
+tip autosave in `TipPage` did exactly this: effect re-ran every render → timer reset → once
+300 ms passed, `POST /tip` → `isPending` changed → render → `onSuccess` invalidated
+`my-share`/`shares` → refetch → render. 142 requests and a button flickering
+"Confirm & Pay" ↔ "Saving...". Depend on `mutate`, never on the mutation.
+
+Harmless in `useCallback` (a recreated callback does not invoke itself), which is why the
+other pages get away with it.
+
+## Debugging the Mini App without a console
+
+There is no devtools on the phone, so the server is the instrument. What actually resolved
+every bug above:
+
+```bash
+docker logs tg-check-splitter-app-1 2>&1 | grep -E 'POST /api/sessions/[^ ]+/(vote|tip|confirm)'
+docker exec tg-check-splitter-db-1 psql -U user -d checksplitter -c "select * from item_votes;"
+```
+
+Two tricks worth knowing. **A lazy chunk request proves navigation happened** — the routes
+are `lazy()`, so if `GET /assets/TipPage-*.js` never appears, the client never reached
+`/tip`, no matter what the user describes. And **the API can be probed directly** by signing
+initData with `BOT_TOKEN` (HMAC-SHA256 over the sorted data-check-string, `Authorization:
+tma <initData>`), which separates a broken client from a broken endpoint.
+
+Note the DB table is `session_items`, not `items`, and credentials come from
+`DATABASE_URL` in `.env` (`user` / `checksplitter`).
+
 ## Split-equal is integer-only
 
 `split_remaining_equally()` distributes whole units and gives the indivisible remainder to
@@ -238,9 +300,10 @@ unit, overbilling the table. If fractional shares are ever wanted, that is a sch
 ## Backlog lives in docs/BACKLOG.md
 
 What is deliberately not built, each with the trigger that would justify building it —
-multi-worker + Redis pub/sub, a `user_activity` table for stable DAU/MAU, and the
-resource arithmetic behind both (measured, not estimated). Read it before adding
-infrastructure; the answer to "should we add Redis" is in there with numbers.
+multi-worker + Redis pub/sub, a `user_activity` table for stable DAU/MAU, splitting the
+bot from the API, rewriting the backend in Rust, and the resource arithmetic behind them
+(measured, not estimated). Read it before adding infrastructure or changing the stack; the
+answers to "should we add Redis" and "should this be Rust" are in there with numbers.
 
 Analytics today come from `tools/stats.sh`, which unions the four tables that already
 carry a `user_tg_id` and a timestamp. One caveat worth knowing before quoting a figure:
@@ -251,7 +314,18 @@ not a bug in the script.
 ## Deployment notes
 
 `entrypoint.sh` runs migrations, then the bot and uvicorn in the same container with
-`wait -n`.
+`wait -n`. Either process dying takes the container with it — splitting them is backlog
+item F.
+
+**The frontend is baked into the image**, so a `webapp/` change is not live until
+`docker compose up -d --build app`. Rebuilding is not enough on its own either: Telegram
+caches the Mini App hard, and the phone must clear its cache before it sees the new bundle.
+Both steps look identical to "the fix did not work" — verify instead by asking the server
+which bundle it serves, since Vite hashes every chunk:
+
+```bash
+curl -s http://127.0.0.1:8005/ | grep -oE '/assets/index-[A-Za-z0-9_-]+\.js'
+```
 
 `nginx/tg-check-splitter.conf` declares its own `map $http_upgrade $connection_upgrade`.
 The sibling `portfolio.conf` already declares an identical one and all `sites-*` share a
