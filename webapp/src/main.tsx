@@ -1,6 +1,6 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { init, isTMA } from "@telegram-apps/sdk-react";
+import { init, isTMA, restoreInitData } from "@telegram-apps/sdk-react";
 import "./index.css";
 import App from "./App";
 import { setInitDataProvider } from "./api/client";
@@ -24,8 +24,17 @@ import { setInitDataProvider } from "./api/client";
 //
 // isTMA("simple") — чтобы открытие в обычном браузере (например, при отладке) не падало
 // на старте: там init() бросил бы ERR_UNKNOWN_ENV.
+// restoreInitData() — отдельный шаг, init() его не делает: внутри init() вызывается
+// только настройка окружения и развешивание приёмников событий (Cr() в
+// sdk/dist/index.js). Без restoreInitData() сигнал initDataUser остаётся пустым, и
+// useTelegramUser() возвращает undefined даже в живом Mini App.
+//
+// Тихо это не проходит: VotingPage берёт `user?.id ?? 0` и считает по нему, чей голос.
+// С id === 0 собственный голос пользователя попадал в «чужие», и на блюде из двух
+// порций maxForMe = 2 - 1 = 1 — вторую порцию взять было нельзя.
 if (isTMA("simple")) {
   init();
+  restoreInitData();
 }
 
 // Set up initData provider for API client

@@ -86,9 +86,13 @@ export default function VotingPage() {
       const item = session?.items.find((i) => i.id === itemId);
       if (!item) return;
       const currentQty = getMyQuantity(item);
-      const othersTotal = item.votes
-        .filter((v) => v.user_tg_id !== currentUserId)
-        .reduce((sum, v) => sum + v.quantity, 0);
+      // Считаем «чужое» как «всё минус моё», а не отбором по user_tg_id. Отбор молча
+      // ломается, когда личность неизвестна: при currentUserId === 0 собственный голос
+      // уезжал в «чужие» и лимит занижался на свою же порцию. Эта форма при той же
+      // поломке даёт максимум завышенный лимит — а верхнюю границу всё равно держит
+      // сервер (set_vote возвращает overflow_prevented), и он-то знает, кто голосует.
+      const totalClaimed = item.votes.reduce((sum, v) => sum + v.quantity, 0);
+      const othersTotal = Math.max(0, totalClaimed - currentQty);
       const maxForMe = item.quantity - othersTotal;
       if (currentQty >= maxForMe) {
         haptic.notificationOccurred("warning");
