@@ -124,7 +124,11 @@ unit, overbilling the table. If fractional shares are ever wanted, that is a sch
 ## Deployment notes
 
 `entrypoint.sh` runs migrations, then the bot and uvicorn in the same container with
-`wait -n`. `nginx/tg-check-splitter.conf` defines its own `map $http_upgrade
-$connection_upgrade` — nothing else on the host does, and without it `nginx -t` fails
-outright. If another vhost ever defines the same map, drop ours (a duplicate map is an
-error).
+`wait -n`.
+
+`nginx/tg-check-splitter.conf` declares its own `map $http_upgrade $connection_upgrade`.
+The sibling `portfolio.conf` already declares an identical one and all `sites-*` share a
+single http context, so this vhost worked without it — ours exists so the file does not
+depend on a variable surviving in a file that `certbot --nginx` rewrites in place.
+Duplicate identical maps are accepted (verified with `nginx -t` on 1.28), so the two do
+not clash. Do not "fix" this by deleting one without checking the other is still there.
