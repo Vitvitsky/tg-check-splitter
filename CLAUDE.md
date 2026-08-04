@@ -65,6 +65,25 @@ Migrations are PostgreSQL-only and SQLite never sees them: `f1a2b3c4d5e6` uses `
 `MIN(id)` is not available for dedupe — `id` is a `uuid` and PostgreSQL has no ordering
 aggregate for that type. Rank duplicates by their timestamp with `ctid` as tie-break.
 
+## Claims are serialised per dish — keep them that way
+
+Every claim path reads the total already claimed and then writes. That read-then-write
+window is the whole product: everyone at the table taps at once. Under READ COMMITTED
+two people tapping the last portion both read "free" and both insert, and the table
+gets billed twice for one dish. The unique constraint does not catch it — it is per
+(item, user), and these are different users.
+
+So `cycle_vote`, `set_vote`, `add_vote_all` and `split_remaining_equally` all open with
+`_lock_item()` (`SELECT … FOR UPDATE` on the dish row). Any new path that mutates
+`ItemVote` must do the same, and must not commit mid-distribution — a commit drops the
+lock and reopens the window. That is why `split_remaining_equally` stages every member's
+units via `_stage_vote_units()` and commits once at the end.
+
+`tests/test_concurrency.py` proves it, and needs a real PostgreSQL: SQLite serialises
+writers and its dialect does not emit FOR UPDATE, so it cannot show the bug *or* the
+fix. Those tests skip silently without `TEST_DATABASE_URL` — check they actually ran
+before trusting a change here.
+
 ## Quota is the paywall — treat it as one
 
 `POST /api/quota/reset` used to zero the caller's free-scan counter with no authorization

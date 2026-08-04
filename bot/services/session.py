@@ -107,10 +107,31 @@ class SessionService:
             await self._db.refresh(item)
         return items
 
+    async def _lock_item(self, item_id: UUID) -> None:
+        """Take a row lock on the dish for the rest of this transaction.
+
+        Every claim path reads the total already claimed and then writes. Without a
+        lock those two steps interleave: under READ COMMITTED two people tapping the
+        last portion at the same moment both read "free" and both insert, so the table
+        is billed for two portions of a one-portion dish. The unique constraint does
+        not help — it is per (item, user), and these are different users.
+
+        Serialising per dish is cheap: the lock is held for one short transaction and
+        only ever contends with other claims on the same dish. Exactly one row is
+        locked per call, so these calls cannot deadlock against each other.
+
+        No-op on SQLite (the dialect does not emit FOR UPDATE); the tests that prove
+        this works run against PostgreSQL.
+        """
+        await self._db.execute(
+            select(SessionItem.id).where(SessionItem.id == item_id).with_for_update()
+        )
+
     async def cycle_vote(self, item_id: UUID, user_tg_id: int, max_qty: int) -> tuple[int, bool]:
         """Cycle vote: 0 → 1 → 2 → ... until total_claimed exhausted, then 0.
         Returns (new_quantity, overflow_prevented).
         overflow_prevented=True means we blocked increment because item was fully claimed."""
+        await self._lock_item(item_id)
         existing = await self._db.execute(
             select(ItemVote).where(ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id)
         )
@@ -157,6 +178,7 @@ class SessionService:
         self, item_id: UUID, user_tg_id: int, quantity: int, max_qty: int
     ) -> tuple[int, bool]:
         """Set vote to exact quantity. Returns (new_quantity, overflow_prevented)."""
+        await self._lock_item(item_id)
         existing = await self._db.execute(
             select(ItemVote).where(ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id)
         )
@@ -200,6 +222,20 @@ class SessionService:
         """
         if qty <= 0:
             return
+        await self._lock_item(item_id)
+        await self._stage_vote_units(item_id, user_tg_id, qty)
+        try:
+            await self._db.commit()
+        except IntegrityError:
+            await self._db.rollback()
+
+    async def _stage_vote_units(self, item_id: UUID, user_tg_id: int, qty: int) -> None:
+        """Add *qty* units to the user's claim without committing.
+
+        Split-equal writes for several members at once and must not commit between
+        them: each commit would drop the row lock and reopen the window where a
+        participant claims a unit the split has already handed to someone else.
+        """
         existing = await self._db.execute(
             select(ItemVote).where(ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id)
         )
@@ -208,10 +244,6 @@ class SessionService:
             vote.quantity += qty
         else:
             self._db.add(ItemVote(item_id=item_id, user_tg_id=user_tg_id, quantity=qty))
-        try:
-            await self._db.commit()
-        except IntegrityError:
-            await self._db.rollback()
 
     async def split_remaining_equally(self, item: SessionItem, member_ids: list[int]) -> int:
         """Distribute an item's unclaimed units among *member_ids*.
@@ -223,7 +255,14 @@ class SessionService:
 
         Units are integers, so ``remaining < len(member_ids)`` cannot be spread over
         everyone; the leftover units go to whoever has claimed the least so far.
+
+        The whole distribution runs under one row lock and one commit, so a
+        participant still voting cannot claim a unit that has just been handed out.
         """
+        # Lock first, then read: reading the remainder before locking would let a
+        # concurrent claim land in between and make the split hand out units that are
+        # no longer free.
+        await self._lock_item(item.id)
         await self._db.refresh(item, ["votes"])
         claimed_by = {v.user_tg_id: v.quantity for v in item.votes}
         remaining = item.quantity - sum(claimed_by.values())
@@ -238,7 +277,12 @@ class SessionService:
         for position, uid in enumerate(order):
             qty = base + (1 if position < extra else 0)
             if qty:
-                await self.add_vote_all(item.id, uid, qty)
+                await self._stage_vote_units(item.id, uid, qty)
+        try:
+            await self._db.commit()
+        except IntegrityError:
+            await self._db.rollback()
+            return 0
         return remaining
 
     async def get_unvoted_items(self, session_id: UUID | str) -> list[SessionItem]:
