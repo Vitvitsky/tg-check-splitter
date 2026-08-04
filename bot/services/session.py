@@ -457,8 +457,15 @@ class SessionService:
             await self._db.commit()
 
     async def unconfirm_member(self, session_id: UUID | str, user_tg_id: int) -> None:
+        """Reopen a member's selection without discarding what they already chose.
+
+        This used to also blank ``tip_percent``. Un-confirming means "I am not done
+        yet", not "I want no tip", and nothing restored the value afterwards: a member
+        who confirmed 20%, changed their mind and confirmed again was settled at 0%.
+        Silently — the amount simply came out lower, and the tip they had chosen was
+        gone from the database with nothing to compare against.
+        """
         member = await self.get_member(session_id, user_tg_id)
         if member:
             member.confirmed = False
-            member.tip_percent = None
             await self._db.commit()

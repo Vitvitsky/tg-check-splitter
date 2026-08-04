@@ -290,3 +290,51 @@ class TestGetMyShare:
         assert data["dishes_total"] == 0.0
         assert data["tip_amount"] == 0.0
         assert data["grand_total"] == 0.0
+
+
+class TestTipSurvivesUnconfirm:
+    """A member who reopens their selection must not silently lose their tip.
+
+    unconfirm_member() used to blank tip_percent, and nothing put it back: confirm →
+    change your mind → confirm again settled you at 0%. Caught by an end-to-end run,
+    where a guest who chose 20% was billed 1350 instead of 1620.
+    """
+
+    async def test_unconfirm_keeps_the_chosen_tip(self, client, auth_headers, session_with_items):
+        session_id, _item_ids = session_with_items
+
+        await client.post(
+            f"/api/sessions/{session_id}/tip", json={"tip_percent": 20}, headers=auth_headers
+        )
+        await client.post(f"/api/sessions/{session_id}/confirm", headers=auth_headers)
+        await client.post(f"/api/sessions/{session_id}/unconfirm", headers=auth_headers)
+
+        resp = await client.get(f"/api/sessions/{session_id}", headers=auth_headers)
+        member = next(m for m in resp.json()["members"] if m["user_tg_id"] == 12345)
+        assert member["confirmed"] is False, "unconfirm must reopen the selection"
+        assert member["tip_percent"] == 20, "the tip must survive reopening"
+
+    async def test_reconfirming_without_resending_the_tip_still_charges_it(
+        self, client, auth_headers, session_with_items
+    ):
+        """The exact path that underbilled: no tip call between unconfirm and confirm."""
+        session_id, item_ids = session_with_items
+        await client.post(
+            f"/api/sessions/{session_id}/vote",
+            json={"item_id": item_ids[0], "quantity": 1},
+            headers=auth_headers,
+        )
+
+        await client.post(
+            f"/api/sessions/{session_id}/tip", json={"tip_percent": 20}, headers=auth_headers
+        )
+        await client.post(f"/api/sessions/{session_id}/confirm", headers=auth_headers)
+        await client.post(f"/api/sessions/{session_id}/unconfirm", headers=auth_headers)
+        await client.post(f"/api/sessions/{session_id}/confirm", headers=auth_headers)
+
+        body = (
+            await client.get(f"/api/sessions/{session_id}/my-share", headers=auth_headers)
+        ).json()
+        assert body["dishes_total"] > 0, "fixture should have produced a claim"
+        assert body["tip_amount"] > 0, "the tip vanished between unconfirm and confirm"
+        assert body["tip_amount"] == pytest.approx(body["dishes_total"] * 0.20)

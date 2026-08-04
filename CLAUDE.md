@@ -148,6 +148,11 @@ read, so a later vote would silently disagree with the amount already pushed to 
 Reads (`/shares`, `/my-share`) stay open after settlement, and `closed_at` is finally
 written (it was on the model, never set).
 
+`unconfirm_member()` reopens a selection **without** clearing `tip_percent`. It used to
+blank it, and nothing put it back, so confirm → change your mind → confirm again settled
+that member at 0% — silently, with the chosen tip gone from the database. Found by an
+end-to-end run, not by the suite; `TestTipSurvivesUnconfirm` covers it now.
+
 ## OCR must finish before nginx gives up
 
 Photos go to the LLM concurrently (`OcrService.parse_receipt`, capped by
