@@ -43,14 +43,23 @@ _OCR_DEADLINE_SECONDS = 240
 
 
 async def _get_session_require_admin(
-    session_id: str, user: TelegramUser, db: AsyncSession
+    session_id: str, user: TelegramUser, db: AsyncSession, *, must_be_open: bool = True
 ) -> Session:
+    """Load a session for an admin-only operation.
+
+    ``must_be_open`` rejects a settled session: once everyone has been told what they
+    owe, changing the receipt would move the amounts out from under them. It is also
+    what keeps POST /settle idempotent — the shares are recomputed on demand, so they
+    only stay stable while the inputs cannot change.
+    """
     svc = SessionService(db)
     session = await svc.get_session_by_id(session_id)
     if not session:
         raise HTTPException(404, "Session not found")
     if session.admin_tg_id != user.id:
         raise HTTPException(403, "Admin access required")
+    if must_be_open and session.status == "settled":
+        raise HTTPException(409, "session_settled")
     return session
 
 

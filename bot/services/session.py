@@ -6,7 +6,14 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models.session import ItemVote, Session, SessionItem, SessionMember, SessionPhoto
+from bot.models.session import (
+    ItemVote,
+    Session,
+    SessionItem,
+    SessionMember,
+    SessionPhoto,
+    _utcnow,
+)
 
 
 class SessionService:
@@ -344,6 +351,30 @@ class SessionService:
             .where(SessionItem.session_id == session_id, ItemVote.user_tg_id == user_tg_id)
         )
         return {row.item_id: row.quantity for row in result.all()}
+
+    async def claim_settlement(self, session_id: UUID | str) -> bool:
+        """Move a session to ``settled``, once and only once.
+
+        Returns True for the caller that performed the transition and False for every
+        later one. The conditional UPDATE is the whole point: two admins tapping
+        "settle" together would otherwise both read a non-settled session and both fire
+        the push notifications, telling everyone their total twice.
+
+        Settling also closes the session for edits (see ``_require_open`` in the API
+        routes), which is what lets the shares be recomputed on demand instead of being
+        stored: the inputs can no longer change, so the answer cannot either.
+        """
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        result = await self._db.execute(
+            update(Session)
+            .where(Session.id == session_id, Session.status != "settled")
+            .values(status="settled", closed_at=_utcnow())
+            .returning(Session.id)
+        )
+        claimed = result.scalar_one_or_none() is not None
+        await self._db.commit()
+        return claimed
 
     async def update_status(self, session_id: UUID | str, status: str) -> None:
         if isinstance(session_id, str):

@@ -23,8 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.models.base import Base
 from tests.db import make_test_engine
-
-TEST_BOT_TOKEN = "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+from tests.env import TEST_BOT_TOKEN, TEST_FREE_SCANS, apply_test_env
 
 
 def make_init_data(
@@ -51,6 +50,16 @@ def make_init_data(
     return urlencode(params)
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_env(monkeypatch):
+    """Keep the developer's own .env out of every test. See tests/env.py."""
+    apply_test_env(monkeypatch)
+    yield
+    from bot.config import get_settings
+
+    get_settings.cache_clear()
+
+
 @pytest.fixture
 def test_settings():
     """Settings instance with test bot token — no .env file required."""
@@ -61,6 +70,7 @@ def test_settings():
         zai_api_key="test-key",
         database_url="sqlite+aiosqlite://",
         webapp_url="http://localhost:5173",
+        free_scans_per_month=TEST_FREE_SCANS,
     )
 
 

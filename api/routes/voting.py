@@ -49,6 +49,20 @@ async def _require_member(
     return session, member
 
 
+def _require_open(session: Session) -> None:
+    """Refuse changes to a settled session.
+
+    Settlement is the moment everyone is told what they owe. Nothing stopped a vote or
+    a tip change afterwards, and since shares are computed on read, the amount on the
+    screen would then quietly disagree with the amount in the push notification.
+
+    This is also what makes POST /settle idempotent without storing anything: the
+    inputs are frozen, so recomputing gives the same answer every time.
+    """
+    if session.status == "settled":
+        raise HTTPException(status_code=409, detail="session_settled")
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -71,6 +85,7 @@ async def vote(
         body.quantity,
     )
     session, _member = await _require_member(db, session_id, user)
+    _require_open(session)
 
     # Find the item inside this session
     item = None
@@ -111,7 +126,8 @@ async def set_tip(
 ):
     """Set the current user's tip percentage for this session."""
     logger.info("user_id=%s tip=%s session=%s", user.id, body.tip_percent, session_id)
-    await _require_member(db, session_id, user)
+    session, _member = await _require_member(db, session_id, user)
+    _require_open(session)
     svc = SessionService(db)
     await svc.set_member_tip(session_id, user.id, body.tip_percent)
 
@@ -136,7 +152,8 @@ async def confirm(
 ):
     """Confirm the current user's selection."""
     logger.info("user_id=%s confirm session=%s", user.id, session_id)
-    await _require_member(db, session_id, user)
+    session, _member = await _require_member(db, session_id, user)
+    _require_open(session)
     svc = SessionService(db)
     await svc.confirm_member(session_id, user.id)
 
@@ -161,7 +178,8 @@ async def unconfirm(
 ):
     """Undo the current user's confirmation."""
     logger.info("user_id=%s unconfirm session=%s", user.id, session_id)
-    await _require_member(db, session_id, user)
+    session, _member = await _require_member(db, session_id, user)
+    _require_open(session)
     svc = SessionService(db)
     await svc.unconfirm_member(session_id, user.id)
 
@@ -287,6 +305,7 @@ async def resolve_unvoted(
         raise HTTPException(status_code=404, detail="Session not found")
     if session.admin_tg_id != user.id:
         raise HTTPException(status_code=403, detail="Admin access required")
+    _require_open(session)
 
     member_ids = [m.user_tg_id for m in session.members]
 

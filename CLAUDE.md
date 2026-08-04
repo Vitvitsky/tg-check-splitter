@@ -59,6 +59,15 @@ their own session, so there was always a child row to orphan).
 All test engines therefore come from `make_test_engine()` in `tests/db.py`. Never call
 `create_async_engine` directly in a test — that silently opts back out of enforcement.
 
+A second isolation trap, same shape: application modules do `from bot.config import
+get_settings`, which binds the function by value, so `patch("bot.config.get_settings")`
+never reaches them — they kept reading the developer's own `.env`. `test_get_quota`
+asserts a free allowance of 3 and began failing the moment someone set
+`FREE_SCANS_PER_MONTH=5` locally, with no code change at all. An autouse fixture now
+pins the environment (`tests/env.py`), which pydantic-settings prefers over `env_file`,
+so every `Settings()` built during a run sees test values regardless of the call site.
+Verify with `FREE_SCANS_PER_MONTH=99 uv run pytest` — it must still pass.
+
 Migrations are PostgreSQL-only and SQLite never sees them: `f1a2b3c4d5e6` uses `ctid` and
 `DELETE … USING`. Verify DDL changes against a real database (recipe in README → Тесты).
 
@@ -122,8 +131,22 @@ bucket it charged (`"free"` / `"paid"`) precisely so the refund goes back where 
 from; drop that value and a paid scan quietly becomes a free one. Any new failure path in
 that handler has to refund too.
 
-Still open here: `settle` is not idempotent, so calling it twice re-sends push
-notifications to everyone.
+## Settlement happens once, and freezes the session
+
+`POST /settle` calls `claim_settlement()` — a conditional `UPDATE … WHERE status <>
+'settled'` — *before* reading anything. Exactly one caller gets `True` and sends the push
+notifications; retries recompute the same figures and return them quietly. It used to
+re-notify the whole table on every call.
+
+Shares are deliberately **not** stored. They do not need to be, because settling also
+closes the session: `_require_open()` in `api/routes/voting.py` and `must_be_open` in
+`api/routes/ocr.py` reject votes, tips, confirmations and receipt edits with `409
+session_settled`. With the inputs frozen, recomputing on read gives the same answer
+forever. Remove those guards and the idempotency goes with them — shares are computed on
+read, so a later vote would silently disagree with the amount already pushed to everyone.
+
+Reads (`/shares`, `/my-share`) stay open after settlement, and `closed_at` is finally
+written (it was on the model, never set).
 
 ## OCR must finish before nginx gives up
 

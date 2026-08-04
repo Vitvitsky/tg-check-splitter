@@ -3,6 +3,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.models.base import Base
 from tests.db import make_test_engine
+from tests.env import apply_test_env
+
+
+@pytest.fixture(autouse=True)
+def _hermetic_env(monkeypatch):
+    """No test may read the developer's own .env — see tests/env.py for the bug."""
+    apply_test_env(monkeypatch)
+    yield
+    from bot.config import get_settings
+
+    get_settings.cache_clear()
 
 
 @pytest.fixture

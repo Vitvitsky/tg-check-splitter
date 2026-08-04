@@ -275,6 +275,12 @@ async def settle_session(
         raise HTTPException(404, "Session not found")
     _require_admin(session, user)
 
+    # Claim the settlement BEFORE reading the data. The transition is what freezes the
+    # session against further edits, so everything computed after it is computed from
+    # inputs that can no longer move — which is why a second call returns the same
+    # numbers without anything being stored. Exactly one caller gets True.
+    first_settlement = await svc.claim_settlement(session_id)
+
     # Refresh relationships to ensure items/votes/members are up-to-date
     await db.refresh(session, ["items", "members"])
     for item in session.items:
@@ -296,8 +302,6 @@ async def settle_session(
     # Build display-name lookup
     name_map = {m.user_tg_id: m.display_name for m in session.members}
 
-    await svc.update_status(session_id, "settled")
-
     result: list[ShareOut] = []
     for uid, grand_total in shares.items():
         # Recompute per-user breakdown for the response
@@ -313,18 +317,23 @@ async def settle_session(
             )
         )
 
-    # Send push notifications to all members
-    settings = get_settings()
-    notifier = NotificationService(settings.bot_token)
-    members_data = [
-        {"user_tg_id": m.user_tg_id, "display_name": m.display_name} for m in session.members
-    ]
-    await notifier.notify_settle(
-        members_data,
-        shares,
-        session.currency or "RUB",
-        settings.webapp_url,
-        session.invite_code,
-    )
+    # Notify once, on the call that actually settled. Retries — a flaky connection, an
+    # impatient double tap, a refetch — return the same numbers silently instead of
+    # telling everyone their total all over again.
+    if first_settlement:
+        settings = get_settings()
+        notifier = NotificationService(settings.bot_token)
+        members_data = [
+            {"user_tg_id": m.user_tg_id, "display_name": m.display_name} for m in session.members
+        ]
+        await notifier.notify_settle(
+            members_data,
+            shares,
+            session.currency or "RUB",
+            settings.webapp_url,
+            session.invite_code,
+        )
+    else:
+        logger.info("session=%s already settled, notifications skipped", session_id)
 
     return result

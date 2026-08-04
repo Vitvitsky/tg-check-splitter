@@ -103,6 +103,32 @@ async def test_set_vote_races_are_also_bounded(pg_sessionmaker):
     assert await _total_claimed(pg_sessionmaker, item_id) <= 4
 
 
+async def test_claim_settlement_is_won_by_exactly_one_caller(pg_sessionmaker):
+    """Two admins tapping "settle" together must not both notify the table.
+
+    claim_settlement() is a conditional UPDATE, so the database picks the winner. Only
+    that caller sends the push notifications; the rest return the same figures quietly.
+    """
+    async with pg_sessionmaker() as db:
+        session = await SessionService(db).create_session(1, "Admin")
+        session_id = session.id
+
+    async def settle():
+        async with pg_sessionmaker() as db:
+            return await SessionService(db).claim_settlement(session_id)
+
+    claims = await asyncio.gather(*(settle() for _ in range(8)))
+
+    assert sum(claims) == 1, f"{sum(claims)} callers believed they settled the session"
+
+    async with pg_sessionmaker() as db:
+        from bot.models.session import Session
+
+        settled = await db.get(Session, session_id)
+        assert settled.status == "settled"
+        assert settled.closed_at is not None
+
+
 async def test_split_equal_does_not_race_against_a_late_voter(pg_sessionmaker):
     """Admin resolves unclaimed units while someone is still tapping the same dish."""
     session, item_id = await _dish(pg_sessionmaker, quantity=4)
