@@ -2,7 +2,7 @@ import secrets
 from decimal import Decimal
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,14 +70,45 @@ class SessionService:
         await self._db.refresh(member)
         return member
 
-    async def add_photo(self, session_id: UUID | str, tg_file_id: str) -> SessionPhoto:
+    async def add_photo(
+        self, session_id: UUID | str, tg_file_id: str, data: bytes | None = None
+    ) -> SessionPhoto:
         if isinstance(session_id, str):
             session_id = UUID(session_id)
-        photo = SessionPhoto(session_id=session_id, tg_file_id=tg_file_id)
+        photo = SessionPhoto(session_id=session_id, tg_file_id=tg_file_id, data=data)
         self._db.add(photo)
         await self._db.commit()
         await self._db.refresh(photo)
         return photo
+
+    async def get_photo_bytes(self, session_id: UUID | str) -> list[bytes]:
+        """Receipt bytes for a session, oldest first, skipping already-cleared rows.
+
+        Selects the column explicitly: SessionPhoto.data is deferred so that ordinary
+        session reads do not carry the JPEGs, and reading it through the ORM attribute
+        would emit one lazy load per photo.
+        """
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        result = await self._db.execute(
+            select(SessionPhoto.data)
+            .where(SessionPhoto.session_id == session_id, SessionPhoto.data.is_not(None))
+            .order_by(SessionPhoto.created_at)
+        )
+        return [row[0] for row in result.all()]
+
+    async def clear_photo_bytes(self, session_id: UUID | str) -> None:
+        """Drop the stored bytes once the receipt has been recognised.
+
+        The rows stay — they are the record that photos were uploaded — but the payload
+        is what costs storage, and it is dead the moment OCR succeeds.
+        """
+        if isinstance(session_id, str):
+            session_id = UUID(session_id)
+        await self._db.execute(
+            update(SessionPhoto).where(SessionPhoto.session_id == session_id).values(data=None)
+        )
+        await self._db.commit()
 
     async def update_currency(self, session_id: UUID | str, currency: str) -> None:
         if isinstance(session_id, str):

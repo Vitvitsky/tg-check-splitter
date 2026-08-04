@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     UniqueConstraint,
@@ -65,6 +66,19 @@ class SessionPhoto(Base):
     )
     tg_file_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
+
+    # Receipt bytes, held only between upload and a successful OCR.
+    #
+    # They used to live in a process-local dict, which meant a restart orphaned every
+    # in-flight session ("No photos available for OCR", unrecoverable) and the API could
+    # never run more than one worker. Storing them here makes the bytes visible to any
+    # process and, because session_id cascades, they are deleted with the session for
+    # free — no sweeper, no TTL job, no disk budget.
+    #
+    # deferred: Session.photos is lazy="selectin", so without this EVERY session load
+    # — every poll of GET /api/sessions/{id} — would drag megabytes of JPEG along.
+    # Read it with an explicit select(SessionPhoto.data), never via the attribute.
+    data: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
 
     session: Mapped["Session"] = relationship(back_populates="photos")
 

@@ -77,19 +77,16 @@ async def upload_photos(
             detail=(f"A receipt takes at most {_MAX_PHOTOS} photos ({already} already uploaded)."),
         )
 
-    if not hasattr(request.app.state, "photo_storage"):
-        request.app.state.photo_storage = {}
-
     photos_out: list[PhotoOut] = []
     for f in files:
         data = await f.read()
         if len(data) > _MAX_PHOTO_SIZE:
             raise HTTPException(413, f"File {f.filename} exceeds 5 MB limit")
 
-        placeholder_id = f"miniapp-{uuid4()}"
-        request.app.state.photo_storage[placeholder_id] = data
-
-        photo = await svc.add_photo(session_id, placeholder_id)
+        # Bytes go on the row, not into a process-local dict: see the migration
+        # a7c3e91b40d2 for why. tg_file_id stays a synthetic id — the column is NOT NULL
+        # and predates Mini App uploads, when it held a real Telegram file id.
+        photo = await svc.add_photo(session_id, f"miniapp-{uuid4()}", data=data)
         photos_out.append(PhotoOut.model_validate(photo))
 
     return photos_out
@@ -104,21 +101,19 @@ async def trigger_ocr(
 ) -> OcrResultOut:
     """Trigger OCR on uploaded photos (admin only)."""
     logger.info("user_id=%s OCR trigger session=%s", user.id, session_id)
-    session = await _get_session_require_admin(session_id, user, db)
+    # Authorization only — the photos are read below by explicit query, not off the
+    # session's (deferred) relationship.
+    await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
     settings = get_settings()
 
     # Collect the photos BEFORE charging. This used to run after the scan was consumed,
-    # so a session whose bytes had been lost (they live in process memory — see
-    # upload_photos) answered 400 and still cost the user a scan.
-    if not hasattr(request.app.state, "photo_storage"):
-        request.app.state.photo_storage = {}
-
-    photos_bytes: list[bytes] = []
-    for photo in session.photos:
-        raw = request.app.state.photo_storage.get(photo.tg_file_id)
-        if raw:
-            photos_bytes.append(raw)
+    # so a session with no usable bytes answered 400 and still cost the user a scan.
+    #
+    # Explicit select rather than photo.data: the column is deferred precisely so that
+    # ordinary session reads do not carry the JPEGs, and touching the attribute would
+    # emit a lazy load per photo (and raise MissingGreenlet in async context).
+    photos_bytes = await svc.get_photo_bytes(session_id)
 
     if not photos_bytes:
         raise HTTPException(400, detail="No photos available for OCR. Try uploading again.")
@@ -176,6 +171,11 @@ async def trigger_ocr(
 
     if result.currency:
         await svc.update_currency(session_id, result.currency)
+
+    # The receipt has been read; the bytes have no further use. Dropping them here is
+    # what keeps steady-state storage at roughly zero — the cascade on session delete is
+    # only the backstop for sessions that never got this far.
+    await svc.clear_photo_bytes(session_id)
 
     return OcrResultOut(
         items=[

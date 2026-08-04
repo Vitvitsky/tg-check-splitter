@@ -84,6 +84,27 @@ writers and its dialect does not emit FOR UPDATE, so it cannot show the bug *or*
 fix. Those tests skip silently without `TEST_DATABASE_URL` — check they actually ran
 before trusting a change here.
 
+## Connections cost ~400x what queries do
+
+Measured on this host: opening a PostgreSQL connection ~80 ms, a query on an established
+one ~0.19 ms. SQLAlchemy's default `pool_size=5` therefore capped `/api/quota` at ~22–32
+req/s — every burst past five had to open overflow connections, which are closed on
+release rather than pooled, so the cost was paid over and over. With `pool_size=20` and a
+warm pool the same endpoint does 105–130 req/s.
+
+Two traps here. `pool_size`/`max_overflow` must **not** be passed for SQLite URLs —
+StaticPool/NullPool reject them and `create_async_engine` raises `TypeError`; nothing in
+the suite calls `get_engine()`, so 152 green tests did not notice (`tests/test_db_engine.py`
+now covers both branches). And `get_settings()` is `lru_cache`d because `api/auth.py`
+calls it on every authenticated request; uncached it re-parsed the environment, reading
+`.env` from disk where present — synchronous I/O on the event loop.
+
+Query counts are guarded by `tests/test_api/test_query_counts.py` rather than timings:
+`GET /api/sessions/my` was 5n+1 queries (251 queries / 505 ms at 50 sessions) and is now
+exactly 1, with the counts computed as correlated subqueries. `correlate(Session)` on
+those subqueries is required — the outer query joins `SessionMember`, and auto-correlation
+would otherwise strip it from the subquery's FROM and fail outright.
+
 ## Quota is the paywall — treat it as one
 
 `POST /api/quota/reset` used to zero the caller's free-scan counter with no authorization
@@ -117,12 +138,34 @@ photos past nginx's limit. `_MAX_PHOTOS` (5, enforced on upload *and* at OCR, an
 mirrored in `ScanPage.tsx`) keeps the worst case inside the deadline. Raising the photo
 cap or the per-photo timeout means rechecking this arithmetic and the nginx value.
 
-## Photos live in process memory
+## Receipt photos: on the row, and short-lived by construction
 
-`app.state.photo_storage` is a plain dict with no TTL and no size cap — uploaded receipt
-bytes stay until the process dies. Consequences: the API must run as a single worker, and
-a restart leaves `session_photos` rows whose bytes are gone, which surfaces as
-"No photos available for OCR" with no way out for that session.
+`session_photos.data` (BYTEA, nullable, **deferred**) holds the uploaded bytes. They used
+to live in `app.state.photo_storage`, a process-local dict with no eviction — a restart
+stranded every in-flight session, only one worker could ever run, and it grew forever.
+
+Cleanup needs no sweeper, no TTL job and no disk budget, because a photo's useful life is
+minutes — upload until OCR succeeds — and two mechanisms already cover it:
+
+* `clear_photo_bytes()` nulls the column right after a successful OCR. This is where
+  effectively all the volume goes; steady state is ~zero.
+* `session_photos.session_id` cascades (migration `f1a2b3c4d5e6`), so anything that never
+  reached OCR dies with its session.
+
+Bytes are deliberately **kept** when OCR fails: that scan is refunded and retryable.
+
+`deferred=True` is load-bearing. `Session.photos` is `lazy="selectin"`, so without it
+every `GET /api/sessions/{id}` — which the Mini App polls — would drag the JPEGs along.
+Read them through `SessionService.get_photo_bytes()` (an explicit `select`), never via
+`photo.data`: the attribute would emit a lazy load per photo and raise `MissingGreenlet`
+in async context.
+
+Sizing, for reference: the client resizes to 2048 px JPEG (~0.3–1 MB), the server caps a
+photo at 5 MB and a receipt at `_MAX_PHOTOS` (5), so a session is ≤25 MB at its very worst
+and 1–3 MB in practice.
+
+The remaining obstacle to running more than one API worker is `ConnectionManager` in
+`api/ws.py` — broadcasts only reach clients attached to the same process.
 
 ## SPA routing depends on the API's fallback
 

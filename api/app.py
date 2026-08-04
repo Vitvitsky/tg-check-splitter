@@ -36,10 +36,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
-    # In-memory photo storage for mini-app uploads (keyed by placeholder tg_file_id)
-    app.state.photo_storage = {}
+    # NOTE: uploaded receipt bytes used to live here in an unbounded process-local dict.
+    # They are columns on session_photos now (migration a7c3e91b40d2) — a restart no
+    # longer strands in-flight sessions, and nothing keeps growing in memory.
 
-    # WebSocket connection manager for real-time updates
+    # WebSocket connection manager for real-time updates.
+    #
+    # This one IS still per-process: broadcasts only reach clients connected to this
+    # worker, so running more than one worker needs a shared backend (e.g. Redis pub/sub)
+    # first. It is now the only thing standing in the way of scaling out.
     app.state.ws_manager = ConnectionManager()
 
     # Routers
