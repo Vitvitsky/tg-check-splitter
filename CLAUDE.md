@@ -206,6 +206,19 @@ one dish across three people evenly — `ItemVote.quantity` is an `Integer`. The
 faked fairness with `max(1, remaining // n)` and handed out four units for one unclaimed
 unit, overbilling the table. If fractional shares are ever wanted, that is a schema change.
 
+## Backlog lives in docs/BACKLOG.md
+
+What is deliberately not built, each with the trigger that would justify building it —
+multi-worker + Redis pub/sub, a `user_activity` table for stable DAU/MAU, and the
+resource arithmetic behind both (measured, not estimated). Read it before adding
+infrastructure; the answer to "should we add Redis" is in there with numbers.
+
+Analytics today come from `tools/stats.sh`, which unions the four tables that already
+carry a `user_tg_id` and a timestamp. One caveat worth knowing before quoting a figure:
+`DELETE /api/sessions/history` cascades away members and votes, so historical DAU is not
+reproducible — yesterday's number can shrink. That is the argument for backlog item B,
+not a bug in the script.
+
 ## Deployment notes
 
 `entrypoint.sh` runs migrations, then the bot and uvicorn in the same container with
