@@ -178,18 +178,21 @@ async def test_settle(client, auth_headers, db_session):
 
     # Add items directly via the service (simulating OCR)
     svc = SessionService(db_session)
-    items = await svc.save_ocr_items(session_id, [
-        {"name": "Pizza", "price": 1000, "quantity": 2},
-        {"name": "Beer", "price": 300, "quantity": 1},
-    ])
+    items = await svc.save_ocr_items(
+        session_id,
+        [
+            {"name": "Pizza", "price": 1000, "quantity": 2},
+            {"name": "Beer", "price": 300, "quantity": 1},
+        ],
+    )
 
     # User 12345 claims 1 pizza, user 99999 claims 1 pizza + 1 beer
     pizza = next(i for i in items if i.name == "Pizza")
     beer = next(i for i in items if i.name == "Beer")
 
-    await svc.cycle_vote(pizza.id, 12345, pizza.quantity)   # 12345 -> 1 pizza
-    await svc.cycle_vote(pizza.id, 99999, pizza.quantity)   # 99999 -> 1 pizza
-    await svc.cycle_vote(beer.id, 99999, beer.quantity)     # 99999 -> 1 beer
+    await svc.cycle_vote(pizza.id, 12345, pizza.quantity)  # 12345 -> 1 pizza
+    await svc.cycle_vote(pizza.id, 99999, pizza.quantity)  # 99999 -> 1 pizza
+    await svc.cycle_vote(beer.id, 99999, beer.quantity)  # 99999 -> 1 beer
 
     # Settle as admin
     resp = await client.post(

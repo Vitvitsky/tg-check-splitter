@@ -35,6 +35,30 @@ class NotificationService:
             logger.warning("Failed to send notification to %s", chat_id, exc_info=True)
             return False
 
+    async def create_invoice_link(
+        self,
+        title: str,
+        description: str,
+        payload: str,
+        stars: int,
+    ) -> str | None:
+        """Create a Telegram Stars invoice link. Returns None on failure."""
+        body = {
+            "title": title,
+            "description": description,
+            "payload": payload,
+            "currency": "XTR",  # Telegram Stars
+            "prices": [{"label": title, "amount": stars}],
+        }
+        try:
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(f"{self.base_url}/createInvoiceLink", json=body)
+                resp.raise_for_status()
+                return resp.json()["result"]
+        except Exception:
+            logger.warning("createInvoiceLink failed", exc_info=True)
+            return None
+
     async def notify_settle(
         self,
         members: list[dict],
@@ -53,7 +77,10 @@ class NotificationService:
                     [
                         {
                             "text": "Посмотреть детали",
-                            "web_app": {"url": f"{webapp_url}?startapp={invite_code}"},
+                            # Direct client-side route, not ?startapp=: the frontend
+                            # never read that parameter, so the button used to dump
+                            # everyone on the home screen.
+                            "web_app": {"url": f"{webapp_url}/session/{invite_code}/settle"},
                         }
                     ]
                 ]
@@ -82,7 +109,7 @@ class NotificationService:
                 [
                     {
                         "text": "Голосовать",
-                        "web_app": {"url": f"{webapp_url}?startapp={invite_code}"},
+                        "web_app": {"url": f"{webapp_url}/session/{invite_code}/vote"},
                     }
                 ]
             ]

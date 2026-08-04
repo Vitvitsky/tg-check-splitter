@@ -192,9 +192,7 @@ class TestGetShares:
     """GET /api/sessions/{id}/shares — all shares after voting."""
 
     @pytest.mark.asyncio
-    async def test_get_shares_with_votes(
-        self, client, auth_headers, session_with_items
-    ):
+    async def test_get_shares_with_votes(self, client, auth_headers, session_with_items):
         session_id, item_ids = session_with_items
 
         # Vote on Pizza (qty 1 of 2) and Beer (qty 1 of 1)
@@ -236,9 +234,7 @@ class TestGetShares:
         assert share["grand_total"] == 605.0
 
     @pytest.mark.asyncio
-    async def test_get_shares_empty_no_votes(
-        self, client, auth_headers, session_with_items
-    ):
+    async def test_get_shares_empty_no_votes(self, client, auth_headers, session_with_items):
         session_id, _ = session_with_items
 
         resp = await client.get(
@@ -282,9 +278,7 @@ class TestGetMyShare:
         assert data["grand_total"] == 360.0
 
     @pytest.mark.asyncio
-    async def test_my_share_no_votes(
-        self, client, auth_headers, session_with_items
-    ):
+    async def test_my_share_no_votes(self, client, auth_headers, session_with_items):
         session_id, _ = session_with_items
 
         resp = await client.get(

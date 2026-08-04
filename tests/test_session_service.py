@@ -1,6 +1,5 @@
 import pytest
 
-from bot.models.session import Session, SessionItem, SessionMember, SessionPhoto
 from bot.services.session import SessionService
 
 
@@ -87,10 +86,13 @@ async def test_cycle_vote_overflow(svc, db_session):
 
 async def test_get_unvoted_items(svc, db_session):
     session = await svc.create_session(admin_tg_id=111, admin_display_name="Admin")
-    items = await svc.save_ocr_items(session.id, [
-        {"name": "Pizza", "price": 650, "quantity": 1},
-        {"name": "Soup", "price": 450, "quantity": 1},
-    ])
+    items = await svc.save_ocr_items(
+        session.id,
+        [
+            {"name": "Pizza", "price": 650, "quantity": 1},
+            {"name": "Soup", "price": 450, "quantity": 1},
+        ],
+    )
     await svc.cycle_vote(items[0].id, user_tg_id=222, max_qty=1)  # unpack not needed
 
     unvoted = await svc.get_unvoted_items(session.id)

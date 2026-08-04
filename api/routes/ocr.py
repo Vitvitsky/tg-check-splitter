@@ -118,19 +118,25 @@ async def trigger_ocr(
     total_photos = len(photos_bytes)
     try:
         if total_photos > 1:
-            await manager.broadcast(session_id, {
-                "type": EVENT_OCR_PROGRESS,
-                "data": {"current": 0, "total": total_photos},
-            })
+            await manager.broadcast(
+                session_id,
+                {
+                    "type": EVENT_OCR_PROGRESS,
+                    "data": {"current": 0, "total": total_photos},
+                },
+            )
 
             results = []
             for i, photo in enumerate(photos_bytes):
                 single = await ocr_service._parse_single_photo(photo)
                 results.append(single)
-                await manager.broadcast(session_id, {
-                    "type": EVENT_OCR_PROGRESS,
-                    "data": {"current": i + 1, "total": total_photos},
-                })
+                await manager.broadcast(
+                    session_id,
+                    {
+                        "type": EVENT_OCR_PROGRESS,
+                        "data": {"current": i + 1, "total": total_photos},
+                    },
+                )
             result = ocr_service._merge_results(results)
         else:
             result = await ocr_service.parse_receipt(photos_bytes)
@@ -166,7 +172,9 @@ async def replace_all_items(
     db: AsyncSession = Depends(get_db),
 ) -> list[ItemOut]:
     """Replace all items in a session (admin only)."""
-    logger.info("user_id=%s replace items session=%s count=%d", user.id, session_id, len(body.items))
+    logger.info(
+        "user_id=%s replace items session=%s count=%d", user.id, session_id, len(body.items)
+    )
     await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
 
@@ -174,10 +182,13 @@ async def replace_all_items(
     items = await svc.save_ocr_items(session_id, [item.model_dump() for item in body.items])
 
     manager = request.app.state.ws_manager
-    await manager.broadcast(session_id, {
-        "type": EVENT_ITEMS_UPDATED,
-        "data": {"count": len(items)},
-    })
+    await manager.broadcast(
+        session_id,
+        {
+            "type": EVENT_ITEMS_UPDATED,
+            "data": {"count": len(items)},
+        },
+    )
 
     return [ItemOut.model_validate(item) for item in items]
 

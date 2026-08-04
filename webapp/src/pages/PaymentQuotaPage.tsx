@@ -1,10 +1,30 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useQuota } from "@/api/queries";
+import { openInvoice } from "@telegram-apps/sdk-react";
+import { useQuota, usePurchaseScans } from "@/api/queries";
 import { Header, Card, Button, CtaBar } from "@/components/ui";
+
+const PACKS = [
+  { scans: 5, stars: 50, blurb: "Best for casual use" },
+  { scans: 20, stars: 150, blurb: "For regular groups" },
+] as const;
 
 export default function PaymentQuotaPage() {
   const navigate = useNavigate();
   const { data: quota, isLoading } = useQuota();
+  const [selected, setSelected] = useState<number>(PACKS[0].scans);
+  const [error, setError] = useState<string | null>(null);
+  const purchase = usePurchaseScans();
+
+  const handlePurchase = async () => {
+    setError(null);
+    try {
+      const { invoice_link } = await purchase.mutateAsync(selected);
+      await openInvoice(invoice_link, "url");
+    } catch {
+      setError("Could not start the payment. Please try again.");
+    }
+  };
 
   if (isLoading) {
     return (
@@ -36,31 +56,54 @@ export default function PaymentQuotaPage() {
 
         {/* Plans */}
         <div className="w-full flex flex-col gap-3">
-          <Card className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-base font-semibold text-tg-text">5 Scans</p>
-              <p className="text-[13px] text-tg-hint">Best for casual use</p>
-            </div>
-            <span className="px-3 py-1 rounded-full bg-tg-button text-tg-button-text text-sm font-semibold">
-              ⭐ 50
-            </span>
-          </Card>
-
-          <Card className="flex items-center justify-between p-4">
-            <div>
-              <p className="text-base font-semibold text-tg-text">20 Scans</p>
-              <p className="text-[13px] text-tg-hint">For regular groups</p>
-            </div>
-            <span className="px-3 py-1 rounded-full bg-tg-secondary-bg text-tg-text text-sm font-semibold">
-              ⭐ 150
-            </span>
-          </Card>
+          {PACKS.map((pack) => {
+            const isSelected = selected === pack.scans;
+            return (
+              <Card
+                key={pack.scans}
+                role="radio"
+                ariaChecked={isSelected}
+                ariaLabel={`${pack.scans} scans for ${pack.stars} stars`}
+                onClick={() => setSelected(pack.scans)}
+                className={`flex items-center justify-between p-4 transition-colors ${
+                  isSelected ? "ring-2 ring-tg-button" : ""
+                }`}
+              >
+                <div>
+                  <p className="text-base font-semibold text-tg-text">
+                    {pack.scans} Scans
+                  </p>
+                  <p className="text-[13px] text-tg-hint">{pack.blurb}</p>
+                </div>
+                <span
+                  className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                    isSelected
+                      ? "bg-tg-button text-tg-button-text"
+                      : "bg-tg-secondary-bg text-tg-text"
+                  }`}
+                >
+                  ⭐ {pack.stars}
+                </span>
+              </Card>
+            );
+          })}
         </div>
+
+        {error && (
+          <p className="text-center text-sm text-tg-destructive">{error}</p>
+        )}
       </div>
 
       <CtaBar>
-        <Button variant="main-action" className="w-full">
-          Purchase with ⭐ Stars
+        <Button
+          variant="main-action"
+          className="w-full"
+          disabled={purchase.isPending}
+          onClick={handlePurchase}
+        >
+          {purchase.isPending
+            ? "Opening…"
+            : `Purchase ${selected} scans with ⭐ Stars`}
         </Button>
       </CtaBar>
     </div>

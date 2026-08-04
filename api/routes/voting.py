@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.auth import TelegramUser, get_current_user
 from api.ws import (
+    EVENT_ITEMS_UPDATED,
     EVENT_MEMBER_CONFIRMED,
     EVENT_MEMBER_UNCONFIRMED,
     EVENT_TIP_CHANGED,
@@ -62,7 +63,13 @@ async def vote(
     db: AsyncSession = Depends(get_db),
 ):
     """Cycle vote on an item (0 -> 1 -> 2 -> ... -> max -> 0)."""
-    logger.info("user_id=%s vote session=%s item=%s qty=%s", user.id, session_id, body.item_id, body.quantity)
+    logger.info(
+        "user_id=%s vote session=%s item=%s qty=%s",
+        user.id,
+        session_id,
+        body.item_id,
+        body.quantity,
+    )
     session, _member = await _require_member(db, session_id, user)
 
     # Find the item inside this session
@@ -80,15 +87,16 @@ async def vote(
             item.id, user.id, body.quantity, item.quantity
         )
     else:
-        quantity, overflow_prevented = await svc.cycle_vote(
-            item.id, user.id, item.quantity
-        )
+        quantity, overflow_prevented = await svc.cycle_vote(item.id, user.id, item.quantity)
 
     manager = request.app.state.ws_manager
-    await manager.broadcast(session_id, {
-        "type": EVENT_VOTE_UPDATED,
-        "data": {"item_id": body.item_id, "user_tg_id": user.id, "quantity": quantity},
-    })
+    await manager.broadcast(
+        session_id,
+        {
+            "type": EVENT_VOTE_UPDATED,
+            "data": {"item_id": body.item_id, "user_tg_id": user.id, "quantity": quantity},
+        },
+    )
 
     return {"quantity": quantity, "overflow_prevented": overflow_prevented}
 
@@ -108,10 +116,13 @@ async def set_tip(
     await svc.set_member_tip(session_id, user.id, body.tip_percent)
 
     manager = request.app.state.ws_manager
-    await manager.broadcast(session_id, {
-        "type": EVENT_TIP_CHANGED,
-        "data": {"user_tg_id": user.id, "tip_percent": body.tip_percent},
-    })
+    await manager.broadcast(
+        session_id,
+        {
+            "type": EVENT_TIP_CHANGED,
+            "data": {"user_tg_id": user.id, "tip_percent": body.tip_percent},
+        },
+    )
 
     return {"ok": True}
 
@@ -130,10 +141,13 @@ async def confirm(
     await svc.confirm_member(session_id, user.id)
 
     manager = request.app.state.ws_manager
-    await manager.broadcast(session_id, {
-        "type": EVENT_MEMBER_CONFIRMED,
-        "data": {"user_tg_id": user.id},
-    })
+    await manager.broadcast(
+        session_id,
+        {
+            "type": EVENT_MEMBER_CONFIRMED,
+            "data": {"user_tg_id": user.id},
+        },
+    )
 
     return {"ok": True}
 
@@ -152,10 +166,13 @@ async def unconfirm(
     await svc.unconfirm_member(session_id, user.id)
 
     manager = request.app.state.ws_manager
-    await manager.broadcast(session_id, {
-        "type": EVENT_MEMBER_UNCONFIRMED,
-        "data": {"user_tg_id": user.id},
-    })
+    await manager.broadcast(
+        session_id,
+        {
+            "type": EVENT_MEMBER_UNCONFIRMED,
+            "data": {"user_tg_id": user.id},
+        },
+    )
 
     return {"ok": True}
 
@@ -182,9 +199,7 @@ async def get_shares(
         for item in session.items
     ]
     per_person_tips = {
-        m.user_tg_id: m.tip_percent
-        for m in session.members
-        if m.tip_percent is not None
+        m.user_tg_id: m.tip_percent for m in session.members if m.tip_percent is not None
     }
 
     shares = calculate_shares(
@@ -204,9 +219,7 @@ async def get_shares(
             if per_person_tips
             else session.tip_percent
         )
-        dishes_total, tip_amount, _ = calculate_user_share(
-            items_data, tg_id, tip_pct
-        )
+        dishes_total, tip_amount, _ = calculate_user_share(items_data, tg_id, tip_pct)
         result.append(
             ShareOut(
                 user_tg_id=tg_id,
@@ -244,9 +257,7 @@ async def get_my_share(
 
     tip_pct = member.tip_percent if member.tip_percent is not None else session.tip_percent
 
-    dishes_total, tip_amount, grand_total = calculate_user_share(
-        items_data, user.id, tip_pct
-    )
+    dishes_total, tip_amount, grand_total = calculate_user_share(items_data, user.id, tip_pct)
 
     # Build display-name lookup
     name_by_tg_id = {m.user_tg_id: m.display_name for m in session.members}
@@ -284,16 +295,17 @@ async def resolve_unvoted(
         if item is None:
             continue
         if action == "remove":
-            from uuid import UUID
-            await svc.delete_item(UUID(item_id_str))
+            await svc.delete_item(item.id)
         elif action == "split":
-            total_claimed = sum(v.quantity for v in item.votes)
-            remaining = item.quantity - total_claimed
-            if remaining > 0 and member_ids:
-                per_member = max(1, remaining // len(member_ids))
-                for i, uid in enumerate(member_ids):
-                    qty = per_member + (1 if i < remaining % len(member_ids) else 0)
-                    if qty > 0:
-                        await svc.add_vote_all(item.id, uid, qty)
+            await svc.split_remaining_equally(item, member_ids)
+
+    manager = request.app.state.ws_manager
+    await manager.broadcast(
+        session_id,
+        {
+            "type": EVENT_ITEMS_UPDATED,
+            "data": {"resolved": len(body.decisions)},
+        },
+    )
 
     return {"ok": True}

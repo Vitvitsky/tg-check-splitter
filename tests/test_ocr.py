@@ -16,14 +16,16 @@ MOCK_LLM_RESPONSE = {
     "choices": [
         {
             "message": {
-                "content": json.dumps({
-                    "items": [
-                        {"name": "Пицца Маргарита", "price": 650, "quantity": 1},
-                        {"name": "Том Ям", "price": 450, "quantity": 2},
-                    ],
-                    "total": 1550,
-                    "currency": "RUB",
-                })
+                "content": json.dumps(
+                    {
+                        "items": [
+                            {"name": "Пицца Маргарита", "price": 650, "quantity": 1},
+                            {"name": "Том Ям", "price": 450, "quantity": 2},
+                        ],
+                        "total": 1550,
+                        "currency": "RUB",
+                    }
+                )
             }
         }
     ]
@@ -49,19 +51,37 @@ async def test_parse_receipt_multiple_photos(ocr_service):
     """Multiple photos are processed one by one and results merged."""
     mock_response_1 = MagicMock()
     mock_response_1.json.return_value = {
-        "choices": [{"message": {"content": json.dumps({
-            "items": [{"name": "Пицца Маргарита", "price": 650, "quantity": 1}],
-            "total": 650, "currency": "RUB",
-        })}}]
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "items": [{"name": "Пицца Маргарита", "price": 650, "quantity": 1}],
+                            "total": 650,
+                            "currency": "RUB",
+                        }
+                    )
+                }
+            }
+        ]
     }
     mock_response_1.raise_for_status = MagicMock()
 
     mock_response_2 = MagicMock()
     mock_response_2.json.return_value = {
-        "choices": [{"message": {"content": json.dumps({
-            "items": [{"name": "Том Ям", "price": 450, "quantity": 2}],
-            "total": 900, "currency": "RUB",
-        })}}]
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "items": [{"name": "Том Ям", "price": 450, "quantity": 2}],
+                            "total": 900,
+                            "currency": "RUB",
+                        }
+                    )
+                }
+            }
+        ]
     }
     mock_response_2.raise_for_status = MagicMock()
 
@@ -85,19 +105,37 @@ async def test_parse_receipt_deduplicates_items(ocr_service):
     """Duplicate items across photos are merged by name."""
     resp1 = MagicMock()
     resp1.json.return_value = {
-        "choices": [{"message": {"content": json.dumps({
-            "items": [{"name": "Кола", "price": 200, "quantity": 2}],
-            "total": 200, "currency": "RUB",
-        })}}]
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "items": [{"name": "Кола", "price": 200, "quantity": 2}],
+                            "total": 200,
+                            "currency": "RUB",
+                        }
+                    )
+                }
+            }
+        ]
     }
     resp1.raise_for_status = MagicMock()
 
     resp2 = MagicMock()
     resp2.json.return_value = {
-        "choices": [{"message": {"content": json.dumps({
-            "items": [{"name": "Кола", "price": 100, "quantity": 1}],
-            "total": 100, "currency": "RUB",
-        })}}]
+        "choices": [
+            {
+                "message": {
+                    "content": json.dumps(
+                        {
+                            "items": [{"name": "Кола", "price": 100, "quantity": 1}],
+                            "total": 100,
+                            "currency": "RUB",
+                        }
+                    )
+                }
+            }
+        ]
     }
     resp2.raise_for_status = MagicMock()
 
@@ -117,11 +155,13 @@ async def test_validation_warning_on_mismatch(ocr_service):
         "choices": [
             {
                 "message": {
-                    "content": json.dumps({
-                        "items": [{"name": "Item", "price": 100, "quantity": 1}],
-                        "total": 200,
-                        "currency": "RUB",
-                    })
+                    "content": json.dumps(
+                        {
+                            "items": [{"name": "Item", "price": 100, "quantity": 1}],
+                            "total": 200,
+                            "currency": "RUB",
+                        }
+                    )
                 }
             }
         ]

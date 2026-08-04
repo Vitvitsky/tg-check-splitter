@@ -97,7 +97,9 @@ class OcrService:
     def _parse_llm_response(raw: str | None, body: dict) -> OcrResult:
         """Extract structured OcrResult from raw LLM text."""
         if not raw or not raw.strip():
-            raise ValueError(f"LLM returned empty content. Full response: {json.dumps(body)[:300]}")
+            raise ValueError(
+                f"LLM returned empty content. Full response: {json.dumps(body)[:300]}"
+            )
 
         raw = raw.strip()
         # Strip special tokens from some models (e.g. glm: <|begin_of_box|>...<|end_of_box|>)
@@ -166,7 +168,9 @@ class OcrService:
         try:
             data = json.loads(truncated)
             if "items" in data and isinstance(data["items"], list):
-                logger.warning("OCR: repaired truncated JSON (%d items recovered)", len(data["items"]))
+                logger.warning(
+                    "OCR: repaired truncated JSON (%d items recovered)", len(data["items"])
+                )
                 # If total is missing, sum items
                 if "total" not in data:
                     data["total"] = sum(i.get("price", 0) for i in data["items"])

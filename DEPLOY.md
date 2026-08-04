@@ -1,7 +1,13 @@
 # Деплой tg-check-splitter
 
-> Готово автоматически: код с OpenRouter на Z.AI (glm-4.6v), nginx-конфиг nginx/tg-check-splitter.conf создан, тесты прошли 109/109.
+> Готово автоматически: код с OpenRouter на Z.AI (glm-4.6v), nginx-конфиг nginx/tg-check-splitter.conf создан.
 > Осталось вам: команды ниже (требуют sudo).
+
+> **Обновление с версии до `f1a2b3c4d5e6`.** Миграция добавляет уникальные индексы и
+> схлопывает дубли в `session_members`, `item_votes` и `payments` (см. README →
+> «Правила целостности»). Она удаляет строки — снимите дамп до `alembic upgrade head`:
+> `docker compose exec db pg_dump -U user checksplitter > backup.sql`.
+> `entrypoint.sh` прогоняет миграции сам при старте контейнера.
 
 ## Шаг 1: токены в .env
 

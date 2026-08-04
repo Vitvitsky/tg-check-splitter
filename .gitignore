@@ -14,3 +14,7 @@ node_modules/
 *.sqlite3
 .claude/
 .omo/
+
+# Build artifacts
+*.tsbuildinfo
+bot.log

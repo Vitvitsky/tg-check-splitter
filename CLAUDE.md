@@ -2,99 +2,110 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+Structure, the REST/WebSocket route tables and the DB model reference live in `README.md`.
+This file covers what the code does not say out loud.
+
 ## Project
 
-Telegram bot for splitting restaurant bills. Users photograph receipts, LLM (via OpenRouter) extracts items, participants join via QR/deep link, vote on dishes with quantity support, choose individual tip %, bot calculates per-person shares.
+Telegram Mini App (+ thin bot) for splitting restaurant bills. Users photograph receipts,
+an LLM (Z.AI `glm-4.6v`) extracts items, participants join via QR/deep link, vote on dishes
+with quantity support, choose an individual tip %, the app calculates per-person shares.
 
 ## Commands
 
 ```bash
-# Run bot locally (requires .env with BOT_TOKEN, OPENROUTER_API_KEY, DATABASE_URL)
+# Run bot locally (requires .env with BOT_TOKEN, ZAI_API_KEY, DATABASE_URL)
 uv run python -m bot
 
-# Run all tests
+# Run API server (serves the REST API, WebSocket and the built Mini App)
+uv run python -m api
+
+# Tests / lint
 uv run pytest
-
-# Run single test file or test
-uv run pytest tests/test_calculator.py -v
 uv run pytest tests/test_calculator.py::test_shared_dish -v
+uv run ruff check bot/ api/ tests/ && uv run ruff format bot/ api/ tests/
 
-# Lint and format
-uv run ruff check bot/ tests/
-uv run ruff format bot/ tests/
-
-# Database migrations
+# Migrations
 uv run alembic revision --autogenerate -m "description"
 uv run alembic upgrade head
 
-# Start postgres (required for bot, not for tests)
-docker compose up -d
+# Frontend
+cd webapp && npm ci && npm run build   # -> webapp/dist/, served by the API
+
+# Postgres (needed by the bot/API, not by the tests)
+docker compose up -d db
 ```
 
-## Architecture
+## The Mini App owns the product; the bot does not
 
-Monolith: aiogram 3.x (long polling) + SQLAlchemy 2.x (async) + PostgreSQL.
+`bot/handlers/` is deliberately two files. `start.py` greets and hands invites to the
+Mini App, `payment.py` settles Stars purchases — that is all. Scanning, editing, voting,
+tips and settlement live in `api/` + `webapp/`.
 
-- `bot/handlers/` — aiogram routers: start (deep link join), check (photo + OCR), voting (quantity-aware inline buttons + per-person tips), admin (QR, unvoted handling, settlement), payment (Telegram Stars)
-- `bot/services/` — business logic: ocr (OpenRouter LLM with vision), session (CRUD + vote cycling), calculator (quantity-aware share splitting with per-person tips), quota (freemium + paid scans)
-- `bot/models/` — SQLAlchemy ORM: Session, SessionPhoto, SessionItem, SessionMember (tip_percent, confirmed), ItemVote (quantity), UserQuota (paid_scans), Payment
-- `bot/keyboards/` — inline keyboard factories: check, voting (with tip/summary keyboards), admin
-- `bot/config.py` — pydantic-settings, access via `get_settings()` (lazy)
-- `bot/db.py` — lazy `get_engine()` / `get_async_session()`
-- `bot/middlewares.py` — DB session injection into handlers via `data["db"]`
+There used to be a second, complete implementation of that flow in
+`bot/handlers/{check,voting,admin}.py` on aiogram FSM and inline keyboards, against the
+same tables. Do not reintroduce it — a feature added to one copy silently does not exist
+in the other, and the seam between them leaked: the QR pointed at `t.me/<bot>?start=`,
+so the bot joined the user and then sent a `?startapp=` button that no frontend code
+ever read, dropping participants on the home screen instead of their check.
 
-## Key Patterns
+## Test suite gotcha: SQLite hides integrity bugs
 
-- **Lazy config/DB**: `get_settings()` and `get_async_session()` defer initialization — no .env required at import time (important for tests)
-- **DB session via middleware**: `DbSessionMiddleware` injects `db: AsyncSession` into every handler
-- **FSM for multi-step flows**: `CheckStates` (photo collection, OCR review, item editing), `VotingStates` (custom tip input)
-- **Virtual sessions**: No real Telegram groups — users interact in DMs, linked by `invite_code` deep links
-- **Admin is a SessionMember**: `create_session()` auto-adds admin as member so they can vote and receive notifications
-- **Quantity-aware voting**: `cycle_vote()` increments claimed quantity (0→1→2→...→max→0), not boolean toggle
-- **Per-person tips**: Each participant chooses their own tip %, stored on SessionMember, calculator applies individually
-- **OCR resilience**: Strips LLM special tokens (`<|begin_of_box|>`), extracts JSON via regex, handles truncated responses
-- **Tests use in-memory SQLite**: `conftest.py` provides `db_session` fixture via aiosqlite, no Postgres needed
-- **All relationship loading is `selectin`**: Async-safe eager loading on all one-to-many relationships
-- **UUID primary keys** on all tables, `BigInteger` for Telegram user IDs
+SQLite ignores foreign keys unless `PRAGMA foreign_keys=ON` is set per connection. That
+is not a style detail: missing `ON DELETE` rules reached production with 109 green tests,
+and `DELETE /api/sessions/history` failed **every** time (the admin is always a member of
+their own session, so there was always a child row to orphan).
 
-## Mini App (webapp/)
+All test engines therefore come from `make_test_engine()` in `tests/db.py`. Never call
+`create_async_engine` directly in a test — that silently opts back out of enforcement.
 
-React 19 + Vite + Tailwind CSS 4 + @telegram-apps/sdk-react + TanStack Query.
+Migrations are PostgreSQL-only and SQLite never sees them: `f1a2b3c4d5e6` uses `ctid` and
+`DELETE … USING`. Verify DDL changes against a real database (recipe in README → Тесты).
 
-### Structure
-- `webapp/src/components/ui/` — design system components: BottomSheet, Header, Button, Avatar, Badge, Chip, Card, SectionLabel, Separator, ReceiptItem, MemberCard, CtaBar
-- `webapp/src/components/sheets/` — bottom sheet dialogs: EditItemSheet, AddItemSheet, CustomTipSheet, AddGuestSheet
-- `webapp/src/components/` — domain components: SessionCard, ItemCard, PhotoPreview, etc.
-- `webapp/src/pages/` — 12 pages (lazy loaded):
-  - HomePage, ScanPage, EditItemsPage, VotingPage, TipPage, SettlePage, JoinPage
-  - VotingAdminPage, UnvotedItemsPage, PaymentQuotaPage, SessionHistoryPage, ShareSessionPage
-- `webapp/src/api/` — client.ts (fetch + TMA auth), types.ts, queries.ts (TanStack Query hooks)
-- `webapp/src/hooks/` — useTelegram.ts, useWebSocket.ts (auto-reconnect + cache invalidation)
-- `webapp/src/lib/` — resize.ts (client-side image resize)
+`MIN(id)` is not available for dedupe — `id` is a `uuid` and PostgreSQL has no ordering
+aggregate for that type. Rank duplicates by their timestamp with `ctid` as tie-break.
 
-### Design System
-Design source: `design/mini-app.pen` (Pencil). Tailwind CSS with `@theme` directive maps Telegram theme variables to custom properties. Background: `bg-tg-secondary-bg`, cards: `bg-tg-section-bg`, accent: `bg-tg-button`.
+## Quota is the paywall — treat it as one
 
-### Routes
-```
-/                           HomePage
-/scan                       ScanPage
-/quota                      PaymentQuotaPage
-/session/:code              JoinPage
-/session/:code/edit         EditItemsPage
-/session/:code/vote         VotingPage
-/session/:code/tip          TipPage
-/session/:code/settle       SettlePage
-/session/:code/admin        VotingAdminPage
-/session/:code/unvoted      UnvotedItemsPage
-/session/:code/share        ShareSessionPage
-/session/:code/history      SessionHistoryPage
-```
+`POST /api/quota/reset` used to zero the caller's free-scan counter with no authorization
+check and no caller in the frontend. It has been removed, not gated. Quota resets only on
+the monthly boundary inside `QuotaService`.
 
-## User Flow
+Prices live server-side in `SCAN_PACKS` (`api/routes/quota.py`); the client names a pack
+size, never an amount. The invoice is created by the API but *credited* by the bot —
+Telegram delivers payment updates over the bot connection only.
 
-1. Admin sends photo(s) → OCR extracts items → admin confirms/edits
-2. QR code + invite link generated → participants join via deep link
-3. Everyone (including admin) selects dishes with quantity support → chooses tip % → sees personal summary → confirms
-4. Admin sees confirmation progress (2/3) → finishes voting → handles unvoted items → settles
-5. All participants receive final notification with their share
+Two known holes still open here: a scan is consumed **before** the OCR call, so a failed
+OCR burns it with no refund; and `settle` is not idempotent, so calling it twice re-sends
+push notifications to everyone.
+
+## Photos live in process memory
+
+`app.state.photo_storage` is a plain dict with no TTL and no size cap — uploaded receipt
+bytes stay until the process dies. Consequences: the API must run as a single worker, and
+a restart leaves `session_photos` rows whose bytes are gone, which surfaces as
+"No photos available for OCR" with no way out for that session.
+
+## SPA routing depends on the API's fallback
+
+The frontend uses `BrowserRouter`, so `/session/<code>/vote` is a real URL a user can
+reload into. `StaticFiles(html=True)` mounted at `/` 404s on unknown paths, so `api/app.py`
+serves `index.html` from a catch-all `GET /{spa_path:path}` instead, with `/assets`
+mounted separately and `/api/...` explicitly kept as a 404. Bot buttons and push
+notifications rely on this and link to real routes.
+
+## Split-equal is integer-only
+
+`split_remaining_equally()` distributes whole units and gives the indivisible remainder to
+the least-claimed members, so the total billed always equals the receipt. It cannot split
+one dish across three people evenly — `ItemVote.quantity` is an `Integer`. The old code
+faked fairness with `max(1, remaining // n)` and handed out four units for one unclaimed
+unit, overbilling the table. If fractional shares are ever wanted, that is a schema change.
+
+## Deployment notes
+
+`entrypoint.sh` runs migrations, then the bot and uvicorn in the same container with
+`wait -n`. `nginx/tg-check-splitter.conf` defines its own `map $http_upgrade
+$connection_upgrade` — nothing else on the host does, and without it `nginx -t` fails
+outright. If another vhost ever defines the same map, drop ours (a duplicate map is an
+error).

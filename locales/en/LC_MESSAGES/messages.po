@@ -23,13 +23,16 @@ msgid "Help text"
 msgstr "How it works:\n\n1. Send a photo of the receipt — I'll recognize the items\n2. Check the list and invite friends via the link\n3. Each person marks their dishes\n4. Choose tip and get your personal total"
 
 msgid "Session not found"
-msgstr "Session not found or you're already participating."
+msgstr "Session not found. The link may have expired."
 
 msgid "Joined voting"
 msgstr "You've joined! Select your dishes."
 
 msgid "Joined waiting"
-msgstr "You've joined. Wait for voting to start."
+msgstr "You've joined. Open the check to pick your dishes."
+
+msgid "Open check"
+msgstr "Open check"
 
 msgid "Free quota"
 msgstr "Free: {free_left}/{limit} per month"

@@ -239,11 +239,21 @@ export function useRemind(sessionId: string) {
   });
 }
 
-export function useResetQuota() {
+/**
+ * Buy a pack of scans with Telegram Stars.
+ *
+ * The server owns the price list (SCAN_PACKS in api/routes/quota.py) and returns an
+ * invoice link; the Stars payment itself is settled by the bot, which is the only
+ * connection Telegram delivers payment updates over.
+ */
+export function usePurchaseScans() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () =>
-      fetchApi<unknown>("/api/quota/reset", { method: "POST" }),
+    mutationFn: (scans: number) =>
+      fetchApi<{ invoice_link: string }>("/api/quota/invoice", {
+        method: "POST",
+        body: JSON.stringify({ scans }),
+      }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["quota"] }),
   });
 }

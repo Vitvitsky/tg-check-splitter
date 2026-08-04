@@ -106,6 +106,10 @@ class QuotaOut(BaseModel):
     reset_at: datetime
 
 
+class InvoiceOut(BaseModel):
+    invoice_link: str
+
+
 # ---------------------------------------------------------------------------
 # Request schemas
 # ---------------------------------------------------------------------------
@@ -141,3 +145,8 @@ class UnvotedDecisionIn(BaseModel):
 
 class SessionCreateIn(BaseModel):
     currency: str = Field(default="RUB", max_length=8)
+
+
+class InvoiceIn(BaseModel):
+    # Only the pack size — the Stars price is looked up server-side in SCAN_PACKS.
+    scans: int

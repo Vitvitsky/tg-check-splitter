@@ -4,7 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 
 from bot.config import get_settings
-from bot.handlers import admin, check, payment, start, voting
+from bot.handlers import payment, start
 from bot.i18n import i18n_middleware
 from bot.middlewares import DbSessionMiddleware
 
@@ -19,11 +19,10 @@ async def main():
     dp.update.middleware(i18n_middleware)
     dp.update.middleware(DbSessionMiddleware())
 
-    dp.include_router(start.router)
-    dp.include_router(check.router)
-    dp.include_router(voting.router)
-    dp.include_router(admin.router)
+    # payment first: its F.successful_payment / pre_checkout filters are narrow, and
+    # start.py ends with a catch-all F.photo handler.
     dp.include_router(payment.router)
+    dp.include_router(start.router)
 
     await dp.start_polling(bot)
 

@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from api.routes.ocr import router as ocr_router
@@ -53,8 +54,37 @@ def create_app() -> FastAPI:
     async def health():
         return {"status": "ok"}
 
-    # Serve built frontend (SPA with fallback to index.html)
+    # Serve the built frontend.
+    #
+    # StaticFiles(html=True) only serves index.html for *directory* paths — it 404s on
+    # unknown ones. The app uses BrowserRouter, so /session/<code>/vote is a real URL a
+    # user can reload or deep-link into, and mounting StaticFiles at "/" made every one
+    # of those a 404. Hashed build assets are served from /assets; everything else that
+    # is not an API or WebSocket route falls through to index.html and is routed
+    # client-side.
     if WEBAPP_DIST.is_dir():
-        app.mount("/", StaticFiles(directory=WEBAPP_DIST, html=True), name="spa")
+        assets_dir = WEBAPP_DIST / "assets"
+        if assets_dir.is_dir():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+        index_file = WEBAPP_DIST / "index.html"
+
+        @app.get("/{spa_path:path}", include_in_schema=False)
+        async def spa_fallback(spa_path: str):
+            # An unmatched /api/... path is a client bug, not a page — keep it a 404
+            # instead of handing back index.html with a 200.
+            if spa_path.startswith("api/"):
+                raise HTTPException(status_code=404, detail="Not found")
+
+            # Serve real files at the dist root (favicon, manifest, robots.txt …)
+            # but never traverse outside it.
+            candidate = (WEBAPP_DIST / spa_path).resolve()
+            if (
+                spa_path
+                and candidate.is_file()
+                and candidate.is_relative_to(WEBAPP_DIST.resolve())
+            ):
+                return FileResponse(candidate)
+            return FileResponse(index_file)
 
     return app

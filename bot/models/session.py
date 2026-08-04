@@ -2,7 +2,16 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, Numeric, String, Uuid
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+    Uuid,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from bot.models.base import Base
@@ -24,16 +33,36 @@ class Session(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    photos: Mapped[list["SessionPhoto"]] = relationship(back_populates="session", lazy="selectin")
-    items: Mapped[list["SessionItem"]] = relationship(back_populates="session", lazy="selectin")
-    members: Mapped[list["SessionMember"]] = relationship(back_populates="session", lazy="selectin")
+    # cascade + passive_deletes: children go away with the session. The DB-level
+    # ON DELETE CASCADE (see migration f1a2b3c4d5e6) does the actual work; the ORM
+    # cascade keeps in-session state consistent without emitting per-row DELETEs.
+    photos: Mapped[list["SessionPhoto"]] = relationship(
+        back_populates="session",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    items: Mapped[list["SessionItem"]] = relationship(
+        back_populates="session",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    members: Mapped[list["SessionMember"]] = relationship(
+        back_populates="session",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class SessionPhoto(Base):
     __tablename__ = "session_photos"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     tg_file_id: Mapped[str] = mapped_column(String, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
 
@@ -44,21 +73,36 @@ class SessionItem(Base):
     __tablename__ = "session_items"
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     name: Mapped[str] = mapped_column(String, nullable=False)
     price: Mapped[Decimal] = mapped_column(Numeric(10, 2), nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
 
     session: Mapped["Session"] = relationship(back_populates="items")
-    votes: Mapped[list["ItemVote"]] = relationship(back_populates="item", lazy="selectin")
+    votes: Mapped[list["ItemVote"]] = relationship(
+        back_populates="item",
+        lazy="selectin",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
 
 class SessionMember(Base):
     __tablename__ = "session_members"
+    # One membership per user per session. Without this, two concurrent joins
+    # (e.g. a double-tapped deep link) insert two rows and every later
+    # get_member() raises MultipleResultsFound for that user, permanently.
+    __table_args__ = (
+        UniqueConstraint("session_id", "user_tg_id", name="uq_session_members_session_user"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    session_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("sessions.id"), nullable=False)
-    user_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("sessions.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False, index=True)
     display_name: Mapped[str] = mapped_column(String, nullable=False)
     tip_percent: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     confirmed: Mapped[bool] = mapped_column(default=False, server_default="false", nullable=False)
@@ -69,9 +113,14 @@ class SessionMember(Base):
 
 class ItemVote(Base):
     __tablename__ = "item_votes"
+    # One vote row per user per item — see the note on SessionMember. A double tap
+    # on the same dish used to create a second row and wedge cycle_vote() forever.
+    __table_args__ = (UniqueConstraint("item_id", "user_tg_id", name="uq_item_votes_item_user"),)
 
     id: Mapped[uuid.UUID] = mapped_column(Uuid, primary_key=True, default=uuid.uuid4)
-    item_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("session_items.id"), nullable=False)
+    item_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("session_items.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     user_tg_id: Mapped[int] = mapped_column(BigInteger, nullable=False)
     quantity: Mapped[int] = mapped_column(Integer, default=1, server_default="1", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)

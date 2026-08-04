@@ -10,7 +10,10 @@ export default function QRInvite({ inviteCode, onClose }: QRInviteProps) {
   const [copied, setCopied] = useState(false);
 
   const botUsername = import.meta.env.VITE_BOT_USERNAME || "serge_w_check_splitter_bot";
-  const inviteLink = `https://t.me/${botUsername}?start=${inviteCode}`;
+  // ?startapp= (not ?start=) opens the Mini App directly on the join screen — see
+  // useStartParam. ?start= only opens a chat with the bot, which then had to bounce
+  // the user back into the app.
+  const inviteLink = `https://t.me/${botUsername}?startapp=${inviteCode}`;
 
   const handleCopy = useCallback(async () => {
     try {

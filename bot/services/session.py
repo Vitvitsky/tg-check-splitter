@@ -3,6 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models.session import ItemVote, Session, SessionItem, SessionMember, SessionPhoto
@@ -31,9 +32,7 @@ class SessionService:
         return session
 
     async def get_session_by_invite(self, invite_code: str) -> Session | None:
-        result = await self._db.execute(
-            select(Session).where(Session.invite_code == invite_code)
-        )
+        result = await self._db.execute(select(Session).where(Session.invite_code == invite_code))
         return result.scalar_one_or_none()
 
     async def get_session_by_id(self, session_id: UUID | str) -> Session | None:
@@ -61,7 +60,13 @@ class SessionService:
             session_id=session.id, user_tg_id=user_tg_id, display_name=display_name
         )
         self._db.add(member)
-        await self._db.commit()
+        try:
+            await self._db.commit()
+        except IntegrityError:
+            # Lost the race against a concurrent join (uq_session_members_session_user).
+            # Same outcome as the check above: already a member, nothing to do.
+            await self._db.rollback()
+            return None
         await self._db.refresh(member)
         return member
 
@@ -102,16 +107,12 @@ class SessionService:
             await self._db.refresh(item)
         return items
 
-    async def cycle_vote(
-        self, item_id: UUID, user_tg_id: int, max_qty: int
-    ) -> tuple[int, bool]:
+    async def cycle_vote(self, item_id: UUID, user_tg_id: int, max_qty: int) -> tuple[int, bool]:
         """Cycle vote: 0 → 1 → 2 → ... until total_claimed exhausted, then 0.
         Returns (new_quantity, overflow_prevented).
         overflow_prevented=True means we blocked increment because item was fully claimed."""
         existing = await self._db.execute(
-            select(ItemVote).where(
-                ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id
-            )
+            select(ItemVote).where(ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id)
         )
         vote = existing.scalar_one_or_none()
 
@@ -135,17 +136,29 @@ class SessionService:
             return 0, True
         new_vote = ItemVote(item_id=item_id, user_tg_id=user_tg_id, quantity=1)
         self._db.add(new_vote)
-        await self._db.commit()
+        try:
+            await self._db.commit()
+        except IntegrityError:
+            # A concurrent tap inserted the row first (uq_item_votes_item_user).
+            # Report what actually landed instead of failing the request.
+            await self._db.rollback()
+            return await self._current_vote_quantity(item_id, user_tg_id), False
         return 1, False
+
+    async def _current_vote_quantity(self, item_id: UUID, user_tg_id: int) -> int:
+        result = await self._db.execute(
+            select(ItemVote.quantity).where(
+                ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id
+            )
+        )
+        return result.scalar_one_or_none() or 0
 
     async def set_vote(
         self, item_id: UUID, user_tg_id: int, quantity: int, max_qty: int
     ) -> tuple[int, bool]:
         """Set vote to exact quantity. Returns (new_quantity, overflow_prevented)."""
         existing = await self._db.execute(
-            select(ItemVote).where(
-                ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id
-            )
+            select(ItemVote).where(ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id)
         )
         vote = existing.scalar_one_or_none()
 
@@ -172,22 +185,61 @@ class SessionService:
         else:
             vote = ItemVote(item_id=item_id, user_tg_id=user_tg_id, quantity=quantity)
             self._db.add(vote)
-        await self._db.commit()
+        try:
+            await self._db.commit()
+        except IntegrityError:
+            await self._db.rollback()
+            return await self._current_vote_quantity(item_id, user_tg_id), False
         return quantity, False
 
     async def add_vote_all(self, item_id: UUID, user_tg_id: int, qty: int) -> None:
-        """Add a vote with specific quantity (for split-equal)."""
+        """Add *qty* units on top of the user's existing claim (for split-equal).
+
+        Adds rather than overwrites: split-equal distributes only the units nobody
+        claimed, so a member who already took 2 of 3 must keep those 2.
+        """
+        if qty <= 0:
+            return
         existing = await self._db.execute(
-            select(ItemVote).where(
-                ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id
-            )
+            select(ItemVote).where(ItemVote.item_id == item_id, ItemVote.user_tg_id == user_tg_id)
         )
         vote = existing.scalar_one_or_none()
         if vote:
-            vote.quantity = qty
+            vote.quantity += qty
         else:
             self._db.add(ItemVote(item_id=item_id, user_tg_id=user_tg_id, quantity=qty))
-        await self._db.commit()
+        try:
+            await self._db.commit()
+        except IntegrityError:
+            await self._db.rollback()
+
+    async def split_remaining_equally(self, item: SessionItem, member_ids: list[int]) -> int:
+        """Distribute an item's unclaimed units among *member_ids*.
+
+        Returns the number of units handed out, which always equals the number that
+        were unclaimed — the previous implementation used ``max(1, remaining // n)``
+        and handed out 4 units for 1 unclaimed unit across 3 members, billing the
+        table more than the receipt said.
+
+        Units are integers, so ``remaining < len(member_ids)`` cannot be spread over
+        everyone; the leftover units go to whoever has claimed the least so far.
+        """
+        await self._db.refresh(item, ["votes"])
+        claimed_by = {v.user_tg_id: v.quantity for v in item.votes}
+        remaining = item.quantity - sum(claimed_by.values())
+        if remaining <= 0 or not member_ids:
+            return 0
+
+        n = len(member_ids)
+        base, extra = divmod(remaining, n)
+        # Least-claimed members get the indivisible remainder.
+        order = sorted(member_ids, key=lambda uid: (claimed_by.get(uid, 0), uid))
+
+        for position, uid in enumerate(order):
+            qty = base + (1 if position < extra else 0)
+            if qty:
+                await self.add_vote_all(item.id, uid, qty)
+        return remaining
 
     async def get_unvoted_items(self, session_id: UUID | str) -> list[SessionItem]:
         """Items where total claimed < item quantity."""
@@ -284,7 +336,9 @@ class SessionService:
         )
         return result.scalar_one_or_none()
 
-    async def set_member_tip(self, session_id: UUID | str, user_tg_id: int, tip_percent: int) -> None:
+    async def set_member_tip(
+        self, session_id: UUID | str, user_tg_id: int, tip_percent: int
+    ) -> None:
         member = await self.get_member(session_id, user_tg_id)
         if member:
             member.tip_percent = tip_percent

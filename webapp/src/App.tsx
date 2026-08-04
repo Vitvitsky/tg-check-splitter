@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
+import { useStartParam } from "@/hooks/useStartParam";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -29,26 +30,34 @@ function Loading() {
   );
 }
 
+/** Routes live here so useStartParam() can sit inside the router context. */
+function AppRoutes() {
+  useStartParam();
+  return (
+    <Suspense fallback={<Loading />}>
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/scan" element={<ScanPage />} />
+        <Route path="/quota" element={<PaymentQuotaPage />} />
+        <Route path="/session/:code" element={<JoinPage />} />
+        <Route path="/session/:code/edit" element={<EditItemsPage />} />
+        <Route path="/session/:code/vote" element={<VotingPage />} />
+        <Route path="/session/:code/tip" element={<TipPage />} />
+        <Route path="/session/:code/settle" element={<SettlePage />} />
+        <Route path="/session/:code/admin" element={<VotingAdminPage />} />
+        <Route path="/session/:code/unvoted" element={<UnvotedItemsPage />} />
+        <Route path="/session/:code/share" element={<ShareSessionPage />} />
+        <Route path="/session/:code/history" element={<SessionHistoryPage />} />
+      </Routes>
+    </Suspense>
+  );
+}
+
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Suspense fallback={<Loading />}>
-          <Routes>
-            <Route path="/" element={<HomePage />} />
-            <Route path="/scan" element={<ScanPage />} />
-            <Route path="/quota" element={<PaymentQuotaPage />} />
-            <Route path="/session/:code" element={<JoinPage />} />
-            <Route path="/session/:code/edit" element={<EditItemsPage />} />
-            <Route path="/session/:code/vote" element={<VotingPage />} />
-            <Route path="/session/:code/tip" element={<TipPage />} />
-            <Route path="/session/:code/settle" element={<SettlePage />} />
-            <Route path="/session/:code/admin" element={<VotingAdminPage />} />
-            <Route path="/session/:code/unvoted" element={<UnvotedItemsPage />} />
-            <Route path="/session/:code/share" element={<ShareSessionPage />} />
-            <Route path="/session/:code/history" element={<SessionHistoryPage />} />
-          </Routes>
-        </Suspense>
+        <AppRoutes />
       </BrowserRouter>
     </QueryClientProvider>
   );

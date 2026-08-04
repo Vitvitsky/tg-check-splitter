@@ -30,7 +30,7 @@ uv sync --extra dev
 
 # Скопировать и заполнить .env
 cp .env.example .env
-# Отредактировать .env: BOT_TOKEN, OPENROUTER_API_KEY, DATABASE_URL
+# Отредактировать .env: BOT_TOKEN, ZAI_API_KEY, DATABASE_URL
 
 # Запустить PostgreSQL
 docker compose up -d db
@@ -88,11 +88,11 @@ Multi-stage сборка: Node.js собирает фронтенд, Python-об
 
 ```
 tg-check-splitter/
-├── bot/                    # Telegram-бот (aiogram 3.x)
-│   ├── handlers/           # Роутеры: start, check, voting, admin, payment
+├── bot/                    # Telegram-бот (aiogram 3.x) — тонкий слой, см. ниже
+│   ├── handlers/           # Роутеры: start (вход в Mini App), payment (Stars)
 │   ├── services/           # Бизнес-логика: ocr, session, calculator, quota
 │   ├── models/             # SQLAlchemy ORM-модели
-│   ├── keyboards/          # Inline-клавиатуры
+│   ├── keyboards/          # Клавиатуры: главное меню + кнопка Mini App
 │   ├── config.py           # Pydantic Settings (lazy init)
 │   ├── db.py               # Async engine + session factory
 │   ├── middlewares.py      # DB session injection
@@ -117,11 +117,23 @@ tg-check-splitter/
 └── tests/                  # Pytest (SQLite in-memory)
 ```
 
+### Разделение обязанностей: Mini App главный, бот тонкий
+
+Весь продуктовый флоу — сканирование, редактирование, голосование, чаевые, расчёт —
+живёт в Mini App и REST API. Бот делает ровно три вещи: приветствие, передачу
+инвайта в Mini App и приём платежей Stars (Telegram доставляет обновления об оплате
+только через бота).
+
+Так было не всегда. `bot/handlers/{check,voting,admin}.py` реализовывали тот же флоу
+на FSM и inline-кнопках — вторую копию логики поверх той же БД. Стык между копиями
+был рваный: QR вёл в чат с ботом, бот присоединял участника и слал кнопку с
+`?startapp=`, который фронтенд никогда не читал, — участник оказывался на главной
+вместо своего чека. Копия удалена; при добавлении фич не воссоздавайте её.
+
 ### Ключевые паттерны
 
 - **Lazy init** — `get_settings()` и `get_async_session()` откладывают инициализацию; `.env` не нужен при импорте (важно для тестов)
 - **DB через middleware** — `DbSessionMiddleware` внедряет `AsyncSession` в каждый хендлер бота
-- **FSM** — `CheckStates` (фото → OCR → редактирование), `VotingStates` (кастомные чаевые)
 - **Виртуальные сессии** — без групп Telegram; участники связаны через `invite_code` deep links
 - **Админ = участник** — `create_session()` автоматически добавляет админа как участника
 - **Quantity-aware голосование** — `cycle_vote()` инкрементирует количество (0→1→2→...→max→0)
@@ -134,6 +146,25 @@ tg-check-splitter/
 ---
 
 ## Модели базы данных
+
+### Правила целостности
+
+Заданы в `bot/models/` и в миграции `f1a2b3c4d5e6`; и то и другое обязательно —
+ORM-каскад держит согласованной сессию SQLAlchemy, `ON DELETE` в БД покрывает
+массовые удаления мимо ORM.
+
+| Ограничение | Зачем |
+|-------------|-------|
+| `sessions → photos/items/members` `ON DELETE CASCADE` | Удаление сессии раньше падало с `IntegrityError` |
+| `session_items → item_votes` `ON DELETE CASCADE` | Удаление блюда с голосами падало |
+| `payments.session_id` `ON DELETE SET NULL` | Платёж — финансовая запись, переживает удаление сессии |
+| `uq_session_members_session_user` | Гонка при join создавала дубль, и `get_member()` навсегда падал с `MultipleResultsFound` |
+| `uq_item_votes_item_user` | То же для двойного тапа по блюду |
+| `uq_payments_charge_id` | Telegram переотправляет `successful_payment`; без этого сканы начислялись дважды |
+
+Вставки, которые могут проиграть гонку (`join_session`, `cycle_vote`, `set_vote`,
+`add_vote_all`), ловят `IntegrityError`, откатываются и возвращают фактическое
+состояние — гонка не должна превращаться в 500.
 
 ### Session
 
@@ -246,7 +277,15 @@ tg-check-splitter/
 | Метод | Путь | Описание |
 |-------|------|----------|
 | `GET` | `/api/quota` | Информация о квоте: `{free_scans_left, paid_scans, reset_at}` |
-| `POST` | `/api/quota/reset` | Сбросить счётчик бесплатных сканирований |
+| `POST` | `/api/quota/invoice` | Создать Stars-инвойс. Body: `{"scans": 5}` → `{invoice_link}` |
+
+Цена пака задаётся сервером (`SCAN_PACKS` в `api/routes/quota.py`), клиент называет
+только размер пака. Mini App открывает ссылку через `openInvoice()`; зачисление
+происходит в `bot/handlers/payment.py`, куда Telegram присылает обновления об оплате.
+
+> `POST /api/quota/reset` удалён. Он обнулял счётчик бесплатных сканирований
+> вызывающему без единой проверки — платный тариф обходился одним curl.
+> Квота сбрасывается только на месячной границе, в `QuotaService`.
 
 ### WebSocket
 
@@ -271,42 +310,46 @@ ws://<host>/ws/{session_id}?token=<initData>
 
 ## Бот: команды и хендлеры
 
+Бот не содержит продуктовой логики и не имеет FSM — он только открывает Mini App
+и обслуживает платежи. См. «Разделение обязанностей» выше.
+
 ### Команды
 
 | Команда | Описание |
 |---------|----------|
 | `/start` | Главное меню + кнопка Mini App |
-| `/start <invite_code>` | Deep link — присоединиться к сессии |
+| `/start <invite_code>` | Legacy deep link: присоединяет и открывает Mini App |
 
 ### Кнопки главного меню
 
 | Кнопка | Действие |
 |--------|----------|
-| Разделить чек | Запрос фото чека |
+| Разделить чек | Открыть Mini App на экране сканирования |
 | Моя квота | Показать лимиты сканирований |
 | Помощь | Инструкция |
 
-### Flow через бота
+Фото, отправленное в чат, больше не запускает OCR — бот отвечает кнопкой в Mini App.
+
+### Приглашения: две формы ссылок
+
+| Ссылка | Кто генерирует | Что происходит |
+|--------|----------------|----------------|
+| `t.me/<bot>?startapp=<code>` | QR и Share в Mini App | Открывает Mini App; `useStartParam` роутит на `/session/<code>` |
+| `t.me/<bot>?start=<code>` | старые, уже разосланные | Бот присоединяет и даёт кнопку в Mini App |
+| `<WEBAPP_URL>/session/<code>/…` | кнопки в push-уведомлениях | Прямой маршрут; работает благодаря SPA-fallback |
+
+`?startapp=` доставляет код через `start_param`, вне пути — путь всегда `/`.
+Поэтому `useStartParam` срабатывает только в корне и не конфликтует с прямыми ссылками.
+
+### Flow
 
 ```
-Фото чека → [OCR] → Подтверждение/Редактирование → QR + invite link
-    → Участники присоединяются через deep link
-    → Голосование (inline-кнопки с количеством)
-    → Выбор чаевых (0/10/15/20/custom %)
-    → Подтверждение → Админ видит прогресс
-    → Завершение → Обработка невыбранных → Расчёт
-    → Push-уведомления каждому с его суммой
+Mini App: фото → OCR → редактирование → QR / invite link
+    → участники открывают Mini App по ?startapp= и присоединяются
+    → голосование с количеством → свой % чаевых → личная сводка → подтверждение
+    → админ видит прогресс → завершение → обработка невыбранных → расчёт
+    → бот шлёт каждому push с его суммой
 ```
-
-### FSM-состояния
-
-**CheckStates:**
-- `collecting_photos` — приём фото чека
-- `reviewing_ocr` — просмотр результатов OCR
-- `editing_item` — редактирование отдельной позиции
-
-**VotingStates:**
-- `custom_tip` — ввод произвольного % чаевых
 
 ---
 
@@ -387,6 +430,27 @@ uv run pytest --cov=bot --cov=api
 ```
 
 Тесты используют `aiosqlite` и fixture `db_session` из `conftest.py`. Конфигурация lazy, поэтому `.env` не требуется.
+
+### Внешние ключи в тестах включены принудительно
+
+SQLite игнорирует внешние ключи, пока для соединения не выполнен
+`PRAGMA foreign_keys=ON`. Из-за этого набор тестов молча принимал удаления, которые
+PostgreSQL отвергает: отсутствующие правила `ON DELETE` на sessions/items уехали в
+прод при 109 зелёных тестах, а `DELETE /api/sessions/history` падал там **всегда**.
+
+Поэтому все тестовые движки создаются через `make_test_engine()` из `tests/db.py`,
+который ставит прагму на каждое соединение. Не создавайте `create_async_engine`
+в тестах напрямую — иначе этот класс багов снова станет невидимым.
+
+Схему миграций SQLite не проверяет вовсе: миграции написаны под PostgreSQL
+(в `f1a2b3c4d5e6` используются `ctid` и `DELETE … USING`). Изменения, затрагивающие
+DDL, прогоняйте на настоящей базе:
+
+```bash
+docker compose up -d db
+docker exec tg-check-splitter-db-1 psql -U user -d postgres -c "CREATE DATABASE migtest;"
+DATABASE_URL="postgresql+asyncpg://user:password@127.0.0.1:5433/migtest" uv run alembic upgrade head
+```
 
 ---
 

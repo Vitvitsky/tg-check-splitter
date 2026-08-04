@@ -10,7 +10,8 @@ export default function ShareSessionPage() {
   const [copied, setCopied] = useState(false);
 
   const botUsername = import.meta.env.VITE_BOT_USERNAME || "serge_w_check_splitter_bot";
-  const inviteLink = `https://t.me/${botUsername}?start=${code}`;
+  // ?startapp= opens the Mini App straight on the join screen (see useStartParam).
+  const inviteLink = `https://t.me/${botUsername}?startapp=${code}`;
 
   const handleCopy = useCallback(async () => {
     try {

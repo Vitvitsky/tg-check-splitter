@@ -19,9 +19,10 @@ from urllib.parse import urlencode
 
 import httpx
 import pytest
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from bot.models.base import Base
+from tests.db import make_test_engine
 
 TEST_BOT_TOKEN = "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
 
@@ -68,8 +69,9 @@ async def db_session():
     """Async SQLAlchemy session backed by an in-memory SQLite database.
 
     Creates all tables before yielding and disposes of the engine afterwards.
+    Foreign keys are enforced (see :mod:`tests.db`).
     """
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    engine = make_test_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

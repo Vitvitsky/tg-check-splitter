@@ -1,14 +1,21 @@
+"""Entry points into the Mini App.
+
+The bot is deliberately thin: the Mini App owns scanning, editing, voting, tips and
+settlement. Everything here does one of three things — greet, hand an invite off to
+the Mini App, or answer a question that is cheaper to answer in chat than to open an
+app for. There is no FSM and no inline voting flow; those used to live in
+bot/handlers/{check,voting,admin}.py and duplicated the REST API in api/ line for line.
+"""
+
 import logging
 
-from aiogram import Bot, F, Router
-from aiogram.filters import CommandStart, CommandObject
-from aiogram.fsm.context import FSMContext
+from aiogram import F, Router
+from aiogram.filters import CommandObject, CommandStart
 from aiogram.types import Message
 from aiogram.utils.i18n import gettext as _, lazy_gettext as __
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.config import get_settings
-from bot.handlers.voting import send_voting_keyboard_to_user
 from bot.keyboards.check import main_menu_kb, webapp_button_kb
 from bot.services.quota import QuotaService
 from bot.services.session import SessionService
@@ -17,44 +24,44 @@ logger = logging.getLogger(__name__)
 router = Router()
 
 
+def session_url(invite_code: str) -> str:
+    """Direct Mini App URL for a session.
+
+    A real client-side route rather than `?startapp=`: the API serves index.html for
+    unknown paths (see api/app.py), so this lands straight on the join screen. The
+    old form passed `?startapp=` to a web_app button and nothing in the frontend ever
+    read that parameter — participants were dropped on the home screen instead.
+    """
+    return f"{get_settings().webapp_url}/session/{invite_code}"
+
+
 @router.message(CommandStart(deep_link=True))
-async def cmd_start_deep_link(
-    message: Message, command: CommandObject, state: FSMContext, db: AsyncSession, bot: Bot
-):
-    """Handle /start with invite code (deep link join)."""
-    logger.info("user_id=%s deep_link=%s", message.from_user.id, command.args)
+async def cmd_start_deep_link(message: Message, command: CommandObject, db: AsyncSession):
+    """Handle /start <invite_code> — legacy t.me/<bot>?start=<code> invite links.
+
+    Newly generated invites use ?startapp= and open the Mini App directly without
+    touching the bot. Links already shared with `?start=` still have to work, so the
+    join is performed here and the user is handed straight to the Mini App.
+    """
     invite_code = command.args
+    logger.info("user_id=%s deep_link=%s", message.from_user.id, invite_code)
+
     svc = SessionService(db)
-    member = await svc.join_session(
+    session = await svc.get_session_by_invite(invite_code)
+    if session is None:
+        await message.answer(_("Session not found"))
+        return
+
+    # join_session() returns None when the user is already a member — not an error.
+    await svc.join_session(
         invite_code=invite_code,
         user_tg_id=message.from_user.id,
         display_name=message.from_user.full_name,
     )
-    if member is None:
-        await message.answer(_("Session not found"))
-        return
-
-    session = await svc.get_session_by_invite(invite_code)
-    await state.update_data(session_id=str(session.id))
-
-    settings = get_settings()
-    webapp_url = f"{settings.webapp_url}?startapp={invite_code}"
-
-    if session and session.status == "voting":
-        await message.answer(_("Joined voting"))
-        await send_voting_keyboard_to_user(
-            bot,
-            db,
-            message.from_user.id,
-            str(session.id),
-            locale=message.from_user.language_code,
-        )
-    else:
-        await message.answer(_("Joined waiting"))
 
     await message.answer(
-        _("Open check in Mini App"),
-        reply_markup=webapp_button_kb(webapp_url, text="Перейти к чеку"),
+        _("Joined waiting"),
+        reply_markup=webapp_button_kb(session_url(invite_code), text=_("Open check")),
     )
 
 
@@ -75,8 +82,12 @@ async def cmd_start(message: Message):
 
 @router.message(F.text == __("Split check"))
 async def main_menu_btn(message: Message):
-    """Handle main menu button press."""
-    await message.answer(_("Send photo to start"))
+    """Open the Mini App on the scan screen."""
+    settings = get_settings()
+    await message.answer(
+        _("Send photo to start"),
+        reply_markup=webapp_button_kb(f"{settings.webapp_url}/scan", text=_("Open check")),
+    )
 
 
 @router.message(F.text == __("My quota"))
@@ -100,3 +111,13 @@ async def quota_btn(message: Message, db: AsyncSession):
 async def help_btn(message: Message):
     """Show help instructions."""
     await message.answer(_("Help text"))
+
+
+@router.message(F.photo)
+async def photo_hint(message: Message):
+    """Photos used to start an in-chat OCR flow; scanning now lives in the Mini App."""
+    settings = get_settings()
+    await message.answer(
+        _("Send photo to start"),
+        reply_markup=webapp_button_kb(f"{settings.webapp_url}/scan", text=_("Open check")),
+    )

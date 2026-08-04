@@ -1,4 +1,3 @@
-import uuid
 from decimal import Decimal
 
 from bot.models.session import ItemVote, Session, SessionItem, SessionMember, SessionPhoto

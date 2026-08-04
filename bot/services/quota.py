@@ -8,7 +8,9 @@ from bot.models.user_quota import UserQuota
 def _next_month_start() -> datetime:
     now = datetime.now(timezone.utc)
     if now.month == 12:
-        return now.replace(year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0)
+        return now.replace(
+            year=now.year + 1, month=1, day=1, hour=0, minute=0, second=0, microsecond=0
+        )
     return now.replace(month=now.month + 1, day=1, hour=0, minute=0, second=0, microsecond=0)
 
 
