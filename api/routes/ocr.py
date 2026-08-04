@@ -1,9 +1,11 @@
 """OCR and item management routes."""
 
+import asyncio
 import logging
 from decimal import Decimal
 from uuid import UUID, uuid4
 
+import httpx
 from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +31,16 @@ router = APIRouter(prefix="/api/sessions/{session_id}", tags=["ocr"])
 
 _MAX_PHOTO_SIZE = 5 * 1024 * 1024  # 5 MB
 
+# Photos per receipt. Bounds both the OCR bill and the in-memory photo store, and keeps
+# the worst-case recognition time inside the deadline below.
+_MAX_PHOTOS = 5
+
+# Hard ceiling on one OCR request, deliberately under nginx's proxy_read_timeout (300 s
+# in nginx/tg-check-splitter.conf). Exceeding that timeout produced a 504 from nginx
+# *after* the scan had been charged, with nothing left to refund it — the request was
+# already gone. Failing here instead keeps the refund path reachable.
+_OCR_DEADLINE_SECONDS = 240
+
 
 async def _get_session_require_admin(
     session_id: str, user: TelegramUser, db: AsyncSession
@@ -52,8 +64,18 @@ async def upload_photos(
 ) -> list[PhotoOut]:
     """Upload receipt photos for a session (admin only)."""
     logger.info("user_id=%s upload photos session=%s count=%d", user.id, session_id, len(files))
-    await _get_session_require_admin(session_id, user, db)
+    session = await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
+
+    # Cap the total, not just this batch — uploads are incremental. Rejecting here keeps
+    # the OCR limit from becoming a dead end where a session can be filled with photos
+    # that can never be recognised.
+    already = len(session.photos)
+    if already + len(files) > _MAX_PHOTOS:
+        raise HTTPException(
+            400,
+            detail=(f"A receipt takes at most {_MAX_PHOTOS} photos ({already} already uploaded)."),
+        )
 
     if not hasattr(request.app.state, "photo_storage"):
         request.app.state.photo_storage = {}
@@ -84,18 +106,11 @@ async def trigger_ocr(
     logger.info("user_id=%s OCR trigger session=%s", user.id, session_id)
     session = await _get_session_require_admin(session_id, user, db)
     svc = SessionService(db)
-
     settings = get_settings()
-    quota_svc = QuotaService(db, settings.free_scans_per_month)
-    if not await quota_svc.can_scan(user.id):
-        raise HTTPException(
-            402,
-            detail="quota_exhausted",
-        )
-    used = await quota_svc.use_scan(user.id)
-    if not used:
-        raise HTTPException(402, detail="quota_exhausted")
 
+    # Collect the photos BEFORE charging. This used to run after the scan was consumed,
+    # so a session whose bytes had been lost (they live in process memory — see
+    # upload_photos) answered 400 and still cost the user a scan.
     if not hasattr(request.app.state, "photo_storage"):
         request.app.state.photo_storage = {}
 
@@ -106,43 +121,53 @@ async def trigger_ocr(
             photos_bytes.append(raw)
 
     if not photos_bytes:
+        raise HTTPException(400, detail="No photos available for OCR. Try uploading again.")
+    if len(photos_bytes) > _MAX_PHOTOS:
         raise HTTPException(
             400,
-            detail="No photos available for OCR. Try uploading again.",
+            detail=f"Too many photos ({len(photos_bytes)}); {_MAX_PHOTOS} is the maximum.",
         )
+
+    quota_svc = QuotaService(db, settings.free_scans_per_month)
+    charged = await quota_svc.use_scan(user.id)
+    if charged is None:
+        raise HTTPException(402, detail="quota_exhausted")
+
+    manager = request.app.state.ws_manager
+    total_photos = len(photos_bytes)
+
+    async def report_progress(completed: int, total: int) -> None:
+        await manager.broadcast(
+            session_id,
+            {"type": EVENT_OCR_PROGRESS, "data": {"current": completed, "total": total}},
+        )
+
+    if total_photos > 1:
+        await report_progress(0, total_photos)
 
     ocr_service = OcrService(settings.zai_api_key, settings.zai_model)
 
-    # Send OCR progress via WebSocket for multi-photo receipts
-    manager = request.app.state.ws_manager
-    total_photos = len(photos_bytes)
+    # Every exit from here that does not produce items refunds the scan: the user is
+    # charged for a parsed receipt, not for an attempt.
     try:
-        if total_photos > 1:
-            await manager.broadcast(
-                session_id,
-                {
-                    "type": EVENT_OCR_PROGRESS,
-                    "data": {"current": 0, "total": total_photos},
-                },
-            )
-
-            results = []
-            for i, photo in enumerate(photos_bytes):
-                single = await ocr_service._parse_single_photo(photo)
-                results.append(single)
-                await manager.broadcast(
-                    session_id,
-                    {
-                        "type": EVENT_OCR_PROGRESS,
-                        "data": {"current": i + 1, "total": total_photos},
-                    },
-                )
-            result = ocr_service._merge_results(results)
-        else:
-            result = await ocr_service.parse_receipt(photos_bytes)
-    except ValueError as e:
-        logger.error("OCR failed: %s", e)
+        async with asyncio.timeout(_OCR_DEADLINE_SECONDS):
+            result = await ocr_service.parse_receipt(photos_bytes, on_progress=report_progress)
+    except TimeoutError:
+        await quota_svc.refund_scan(user.id, charged)
+        logger.error("OCR timed out after %ss (%d photos)", _OCR_DEADLINE_SECONDS, total_photos)
+        raise HTTPException(504, detail="Recognition took too long. Try fewer photos.")
+    except httpx.HTTPError as exc:
+        await quota_svc.refund_scan(user.id, charged)
+        logger.error("OCR provider error: %s", exc)
+        raise HTTPException(502, detail="Recognition service is unavailable. Try again.")
+    except ValueError as exc:
+        await quota_svc.refund_scan(user.id, charged)
+        logger.error("OCR failed: %s", exc)
         raise HTTPException(422, detail="Could not parse receipt. Try a clearer photo.")
+
+    if not result.items:
+        await quota_svc.refund_scan(user.id, charged)
+        raise HTTPException(422, detail="No items found on the receipt. Try a clearer photo.")
 
     await svc.save_ocr_items(
         session_id,

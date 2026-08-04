@@ -94,9 +94,28 @@ Prices live server-side in `SCAN_PACKS` (`api/routes/quota.py`); the client name
 size, never an amount. The invoice is created by the API but *credited* by the bot —
 Telegram delivers payment updates over the bot connection only.
 
-Two known holes still open here: a scan is consumed **before** the OCR call, so a failed
-OCR burns it with no refund; and `settle` is not idempotent, so calling it twice re-sends
-push notifications to everyone.
+A scan is charged for a *parsed receipt*, not for an attempt. `trigger_ocr` collects the
+photos before charging, and every exit that yields no items — provider error, deadline,
+unparseable response, zero items — calls `refund_scan()`. `use_scan()` returns which
+bucket it charged (`"free"` / `"paid"`) precisely so the refund goes back where it came
+from; drop that value and a paid scan quietly becomes a free one. Any new failure path in
+that handler has to refund too.
+
+Still open here: `settle` is not idempotent, so calling it twice re-sends push
+notifications to everyone.
+
+## OCR must finish before nginx gives up
+
+Photos go to the LLM concurrently (`OcrService.parse_receipt`, capped by
+`_MAX_CONCURRENT_PHOTOS`), and the whole call sits inside
+`asyncio.timeout(_OCR_DEADLINE_SECONDS)` — 240 s against nginx's 300 s
+`proxy_read_timeout`. That ordering is the point: once nginx times out the connection is
+gone and no handler is left to refund the scan, so the app has to fail first.
+
+They used to run one after another at 120 s each, which put any receipt of three or more
+photos past nginx's limit. `_MAX_PHOTOS` (5, enforced on upload *and* at OCR, and
+mirrored in `ScanPage.tsx`) keeps the worst case inside the deadline. Raising the photo
+cap or the per-photo timeout means rechecking this arithmetic and the nginx value.
 
 ## Photos live in process memory
 

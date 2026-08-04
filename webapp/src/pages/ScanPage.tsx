@@ -11,6 +11,35 @@ import { formatMoney } from "@/lib/currency";
 
 type Stage = "upload" | "processing" | "results";
 
+/** Mirrors _MAX_PHOTOS in api/routes/ocr.py — the server rejects anything above this. */
+const MAX_PHOTOS = 5;
+
+/**
+ * Turn a failed scan into something the user can act on.
+ *
+ * The server refunds the scan on every one of these outcomes, so the message should
+ * invite a retry rather than imply the attempt was paid for.
+ */
+function scanErrorMessage(err: unknown): string {
+  if (!(err instanceof ApiError)) return "Не удалось распознать чек. Попробуйте снова.";
+  switch (err.status) {
+    case 401:
+      return "Откройте мини-приложение из Telegram.";
+    case 402:
+      return "Лимит сканов исчерпан. Купите дополнительные на экране квоты.";
+    case 400:
+      return `Чек занимает не больше ${MAX_PHOTOS} фото. Уберите лишние и попробуйте снова.`;
+    case 422:
+      return "Не удалось прочитать чек. Снимите его целиком при хорошем свете.";
+    case 502:
+      return "Сервис распознавания недоступен. Скан не списан — попробуйте позже.";
+    case 504:
+      return "Распознавание заняло слишком долго. Скан не списан — попробуйте меньше фото.";
+    default:
+      return "Не удалось распознать чек. Попробуйте снова.";
+  }
+}
+
 export default function ScanPage() {
   const navigate = useNavigate();
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -59,7 +88,15 @@ export default function ScanPage() {
         newFiles.push(new File([resized], file.name, { type: "image/jpeg" }));
       } catch { newFiles.push(file); }
     }
-    setPhotos((prev) => [...prev, ...newFiles]);
+    // Cap here as well as on the server: finding out about the limit only after a
+    // multi-megabyte upload is a bad trade when the number is known up front.
+    setPhotos((prev) => {
+      const room = MAX_PHOTOS - prev.length;
+      if (newFiles.length > room) {
+        setError(`Чек занимает не больше ${MAX_PHOTOS} фото — лишние не добавлены.`);
+      }
+      return [...prev, ...newFiles.slice(0, Math.max(0, room))];
+    });
     e.target.value = "";
   }, []);
 
@@ -77,17 +114,7 @@ export default function ScanPage() {
       setOcrResult(result);
       setStage("results");
     } catch (err) {
-      const msg =
-        err instanceof ApiError
-          ? err.status === 402
-            ? "Лимит сканов исчерпан. Купите дополнительные в боте."
-            : typeof (err.data as { detail?: string })?.detail === "string"
-              ? (err.data as { detail: string }).detail
-              : err.status === 401
-                ? "Откройте мини-приложение из Telegram."
-                : "Не удалось распознать чек. Попробуйте снова."
-          : "Не удалось распознать чек. Попробуйте снова.";
-      setError(msg);
+      setError(scanErrorMessage(err));
       setStage("upload");
     }
   }, [sessionId, photos, uploadPhotos, triggerOcr]);

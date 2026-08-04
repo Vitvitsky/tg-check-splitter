@@ -1,10 +1,12 @@
+import asyncio
 import json
+import time
 from decimal import Decimal
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bot.services.ocr import OcrResult, OcrService
+from bot.services.ocr import OcrItem, OcrResult, OcrService
 
 
 @pytest.fixture
@@ -174,3 +176,78 @@ async def test_validation_warning_on_mismatch(ocr_service):
         result = await ocr_service.parse_receipt([b"photo"])
 
     assert result.total_mismatch is True
+
+
+# ---------------------------------------------------------------------------
+# Multi-photo receipts are parsed concurrently
+# ---------------------------------------------------------------------------
+
+
+async def test_photos_are_parsed_concurrently_not_one_after_another():
+    """Sequential parsing is what pushed multi-photo receipts past nginx's timeout.
+
+    Four photos at 120 s each is 480 s sequentially — nginx cuts the connection at
+    300 s and the user gets a 504 for a scan they were already charged for. Run
+    together, the wall clock is one photo's worth.
+    """
+    delay = 0.2
+    photo_count = 4
+
+    async def slow_parse(_self, _photo):
+        await asyncio.sleep(delay)
+        return OcrResult(
+            items=[OcrItem(name="Item", price=Decimal("100"), quantity=1)],
+            total=Decimal("100"),
+            currency="RUB",
+        )
+
+    svc = OcrService("key", "model")
+    with patch.object(OcrService, "_parse_single_photo", slow_parse):
+        started = time.perf_counter()
+        result = await svc.parse_receipt([b"a", b"b", b"c", b"d"])
+        elapsed = time.perf_counter() - started
+
+    assert len(result.items) == 1  # same name -> merged
+    assert result.items[0].quantity == photo_count
+    assert elapsed < delay * photo_count / 2, (
+        f"took {elapsed:.2f}s for {photo_count} photos of {delay}s — looks sequential"
+    )
+
+
+async def test_progress_is_reported_for_every_photo():
+    """The Mini App renders this over WebSocket; it must reach `total`."""
+
+    async def fast_parse(_self, _photo):
+        return OcrResult(items=[], total=Decimal("0"), currency="RUB")
+
+    seen: list[tuple[int, int]] = []
+
+    async def on_progress(completed: int, total: int) -> None:
+        seen.append((completed, total))
+
+    svc = OcrService("key", "model")
+    with patch.object(OcrService, "_parse_single_photo", fast_parse):
+        await svc.parse_receipt([b"a", b"b", b"c"], on_progress=on_progress)
+
+    assert len(seen) == 3
+    assert {total for _done, total in seen} == {3}
+    assert sorted(done for done, _total in seen) == [1, 2, 3]
+
+
+async def test_progress_is_reported_for_a_single_photo():
+    """The single-photo path short-circuits the gather — it must still report."""
+
+    async def fast_parse(_self, _photo):
+        return OcrResult(items=[], total=Decimal("0"), currency="RUB")
+
+    seen: list[tuple[int, int]] = []
+
+    svc = OcrService("key", "model")
+    with patch.object(OcrService, "_parse_single_photo", fast_parse):
+        await svc.parse_receipt([b"only"], on_progress=lambda c, t: _record(seen, c, t))
+
+    assert seen == [(1, 1)]
+
+
+async def _record(sink: list, completed: int, total: int) -> None:
+    sink.append((completed, total))

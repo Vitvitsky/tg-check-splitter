@@ -1,8 +1,11 @@
+import logging
 from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from bot.models.user_quota import UserQuota
+
+logger = logging.getLogger(__name__)
 
 
 def _next_month_start() -> datetime:
@@ -70,12 +73,42 @@ class QuotaService:
         quota = await self._get_or_create(user_tg_id)
         return quota.paid_scans > 0
 
-    async def use_scan(self, user_tg_id: int) -> bool:
-        """Use a scan — free first, then paid. Returns True if successful."""
+    async def use_scan(self, user_tg_id: int) -> str | None:
+        """Charge one scan — free allowance first, then a paid one.
+
+        Returns which bucket paid for it (``"free"`` or ``"paid"``), or ``None`` if the
+        user had nothing left. The caller must keep that value: refunding a failed scan
+        has to put it back where it came from, or a paid scan silently turns into a free
+        one (or vanishes once the month rolls over).
+        """
         if await self.can_scan_free(user_tg_id):
             await self.use_free_scan(user_tg_id)
-            return True
-        return await self.use_paid_scan(user_tg_id)
+            return "free"
+        if await self.use_paid_scan(user_tg_id):
+            return "paid"
+        return None
+
+    async def refund_scan(self, user_tg_id: int, charged: str | None) -> None:
+        """Give back a scan charged by :meth:`use_scan` that produced no result.
+
+        The OCR call is billed before the LLM is contacted, so a provider timeout, a
+        rate limit or an unreadable photo used to cost the user a scan for nothing.
+
+        A free refund clamps at zero: if the monthly boundary passed between the charge
+        and the refund the counter has already been reset, and decrementing it would
+        hand out an extra scan.
+        """
+        if charged is None:
+            return
+        quota = await self._get_or_create(user_tg_id)
+        if charged == "free":
+            quota.free_scans_used = max(0, quota.free_scans_used - 1)
+        elif charged == "paid":
+            quota.paid_scans += 1
+        else:
+            logger.warning("Unknown scan charge kind %r, not refunding", charged)
+            return
+        await self._db.commit()
 
     async def get_quota_info(self, user_tg_id: int) -> tuple[int, int, datetime]:
         """Return (free_left, paid_scans, reset_at)."""

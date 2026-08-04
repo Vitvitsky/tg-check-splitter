@@ -1,7 +1,9 @@
+import asyncio
 import base64
 import json
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -10,6 +12,13 @@ import httpx
 logger = logging.getLogger(__name__)
 
 ZAI_URL = "https://api.z.ai/api/paas/v4/chat/completions"
+
+# Photos are sent to the LLM in parallel; this bounds how many calls are in flight at
+# once so a long receipt cannot fan out into a burst the provider rate-limits.
+_MAX_CONCURRENT_PHOTOS = 5
+
+# Awaited with (completed, total) after each photo finishes.
+ProgressCallback = Callable[[int, int], Awaitable[None]]
 
 SYSTEM_PROMPT = """\
 You are a receipt parser. Extract all line items from the receipt photo.
@@ -51,18 +60,49 @@ class OcrService:
         self._api_key = api_key
         self._model = model
 
-    async def parse_receipt(self, photos: list[bytes]) -> OcrResult:
-        """Parse receipt photos one by one, then merge results."""
-        if len(photos) == 1:
-            return await self._parse_single_photo(photos[0])
+    async def parse_receipt(
+        self,
+        photos: list[bytes],
+        on_progress: ProgressCallback | None = None,
+    ) -> OcrResult:
+        """Parse receipt photos concurrently, then merge the results.
 
-        results: list[OcrResult] = []
-        for i, photo in enumerate(photos):
-            logger.info("OCR: processing photo %d/%d", i + 1, len(photos))
-            result = await self._parse_single_photo(photo)
-            results.append(result)
+        Photos used to be sent to the LLM one after another. Each call has a 120 s
+        timeout, so a three-photo receipt could take 360 s — past nginx's 300 s
+        proxy_read_timeout, which meant the user got a 504 while the scan had already
+        been charged. Sending them together makes the wall-clock cost of a multi-photo
+        receipt roughly that of a single photo.
 
-        return self._merge_results(results)
+        *on_progress* is awaited with ``(completed, total)`` as each photo lands, so
+        callers can stream progress; completions are not ordered, but the merged
+        result is assembled in the original photo order.
+        """
+        total = len(photos)
+        if total == 1:
+            result = await self._parse_single_photo(photos[0])
+            if on_progress:
+                await on_progress(1, 1)
+            return result
+
+        semaphore = asyncio.Semaphore(_MAX_CONCURRENT_PHOTOS)
+        completed = 0
+        counter_lock = asyncio.Lock()
+
+        async def parse_one(index: int, photo: bytes) -> tuple[int, OcrResult]:
+            nonlocal completed
+            async with semaphore:
+                result = await self._parse_single_photo(photo)
+            async with counter_lock:
+                completed += 1
+                done = completed
+            logger.info("OCR: photo %d/%d done", done, total)
+            if on_progress:
+                await on_progress(done, total)
+            return index, result
+
+        pairs = await asyncio.gather(*(parse_one(i, p) for i, p in enumerate(photos)))
+        ordered = [result for _index, result in sorted(pairs, key=lambda pair: pair[0])]
+        return self._merge_results(ordered)
 
     async def _parse_single_photo(self, photo: bytes) -> OcrResult:
         """Send a single photo to the LLM and parse the response."""
