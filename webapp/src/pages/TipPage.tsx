@@ -43,11 +43,22 @@ export default function TipPage() {
     if (currentMember?.confirmed) setIsConfirmed(true);
   }, [currentMember?.confirmed]);
 
+  // Автосохранение чаевых с дебаунсом. В зависимостях должен стоять `mutate`, а не сам
+  // объект мутации: useMutation возвращает новый литерал на каждом рендере
+  // (`return { ...result, mutate, ... }` в useMutation.js), тогда как сам `mutate`
+  // обёрнут в useCallback и стабилен.
+  //
+  // С объектом в зависимостях эффект перезапускался на каждом рендере и таймер уезжал
+  // заново. Как только между рендерами набегало 300 мс, уходил POST /tip → isPending
+  // менялся → рендер → onSuccess инвалидировал my-share и shares → рефетч → рендер, и
+  // цикл сам себя кормил: кнопка мигала «Confirm & Pay» ↔ «Saving...», а на сервер
+  // ушло 142 запроса.
+  const saveTip = setTipMutation.mutate;
   useEffect(() => {
     if (!sessionId || !tipSaved) return;
-    const timer = setTimeout(() => setTipMutation.mutate(tipPercent), 300);
+    const timer = setTimeout(() => saveTip(tipPercent), 300);
     return () => clearTimeout(timer);
-  }, [tipPercent, sessionId, tipSaved, setTipMutation]);
+  }, [tipPercent, sessionId, tipSaved, saveTip]);
 
   const handleTipChange = useCallback((value: number) => {
     setTipPercent(value);
