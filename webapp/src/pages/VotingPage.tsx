@@ -109,10 +109,21 @@ export default function VotingPage() {
     [session, getMyQuantity, sendVote],
   );
 
+  // Кнопка была `disabled` при нуле отмеченных блюд. Отключённый <button> глотает тап
+  // молча, а `disabled:opacity-40` поверх tg-button в тёмной теме читается как обычная
+  // кнопка — на обоих телефонах это выглядело как «нажимаю, ничего не происходит».
+  // Теперь кнопка живая и сама объясняет, чего не хватает.
   const handleNext = useCallback(() => {
+    const selected = (session?.items ?? []).reduce((sum, item) => sum + getMyQuantity(item), 0);
+    if (selected === 0) {
+      haptic.notificationOccurred("warning");
+      setError("Сначала отметьте свои блюда — кнопка «Claim» справа от каждого");
+      return;
+    }
+    setError(null);
     haptic.impactOccurred("light");
     navigate(`/session/${code}/tip`);
-  }, [navigate, code, haptic]);
+  }, [navigate, code, haptic, session, getMyQuantity]);
 
   if (isLoading) {
     return (
@@ -179,12 +190,12 @@ export default function VotingPage() {
 
       {/* CTA */}
       <CtaBar>
-        <Button
-          variant="main-action"
-          className="w-full"
-          disabled={totalSelected === 0}
-          onClick={handleNext}
-        >
+        {totalSelected === 0 && !error && (
+          <p className="pb-2 text-center text-[13px] text-tg-hint">
+            Отметьте свои блюда кнопкой «Claim»
+          </p>
+        )}
+        <Button variant="main-action" className="w-full" onClick={handleNext}>
           Confirm Selection
         </Button>
       </CtaBar>
