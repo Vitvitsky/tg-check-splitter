@@ -139,14 +139,26 @@ export default function VotingAdminPage() {
       </div>
 
       <CtaBar>
-        <Button
-          variant="main-action"
-          className="w-full"
-          disabled={finishMutation.isPending}
-          onClick={handleEndVoting}
-        >
-          {finishMutation.isPending ? "Ending..." : "End Voting"}
-        </Button>
+        <div className="flex w-full flex-col gap-2">
+          {/* Приглашение во время голосования. Экран /share существовал, но вёл на
+              него только экран истории — то есть уже после расчёта, когда звать
+              некого. Админ ждёт участников именно здесь. */}
+          <Button
+            variant="secondary"
+            className="w-full"
+            onClick={() => navigate(`/session/${code}/share`)}
+          >
+            Пригласить ещё
+          </Button>
+          <Button
+            variant="main-action"
+            className="w-full"
+            disabled={finishMutation.isPending}
+            onClick={handleEndVoting}
+          >
+            {finishMutation.isPending ? "Ending..." : "End Voting"}
+          </Button>
+        </div>
       </CtaBar>
     </div>
   );

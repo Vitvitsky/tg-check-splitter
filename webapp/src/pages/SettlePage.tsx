@@ -6,6 +6,7 @@ import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
 import { Header, Card, SectionLabel, Separator, Badge, Button, CtaBar } from "@/components/ui";
 import MemberCardUI from "@/components/ui/MemberCard";
 import { formatMoney } from "@/lib/currency";
+import { apiErrorMessage } from "@/lib/apiErrors";
 import type { Share } from "@/api/types";
 
 export default function SettlePage() {
@@ -22,6 +23,7 @@ export default function SettlePage() {
   const { data: shares } = useShares(sessionId);
   const settleMutation = useSettle(sessionId);
   const [settledShares, setSettledShares] = useState<Share[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   const currentUserId = user?.id ?? 0;
   const isAdmin = session?.admin_tg_id === currentUserId;
@@ -42,7 +44,10 @@ export default function SettlePage() {
       const result = await settleMutation.mutateAsync();
       setSettledShares(result);
       haptic.notificationOccurred("success");
-    } catch { haptic.notificationOccurred("error"); }
+    } catch (err) {
+      haptic.notificationOccurred("error");
+      setError(apiErrorMessage(err));
+    }
   }, [sessionId, unvotedItems.length, code, navigate, settleMutation, haptic]);
 
   if (isLoading) {
@@ -147,6 +152,10 @@ export default function SettlePage() {
           </Card>
         )}
       </div>
+
+      {error && (
+        <p className="px-4 pb-2 text-center text-sm text-tg-destructive">{error}</p>
+      )}
 
       {/* CTA */}
       {isAdmin && !isSettled && (

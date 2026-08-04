@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useCreateSession, useUploadPhotos, useTriggerOcr } from "@/api/queries";
 import { ApiError } from "@/api/client";
+import { isQuotaError } from "@/lib/apiErrors";
 import type { OcrResult } from "@/api/types";
 import { resizeImage } from "@/lib/resize";
 import { useWebSocket } from "@/hooks/useWebSocket";
@@ -26,7 +27,7 @@ function scanErrorMessage(err: unknown): string {
     case 401:
       return "Откройте мини-приложение из Telegram.";
     case 402:
-      return "Лимит сканов исчерпан. Купите дополнительные на экране квоты.";
+      return "Бесплатные сканирования закончились.";
     case 400:
       return `Чек занимает не больше ${MAX_PHOTOS} фото. Уберите лишние и попробуйте снова.`;
     case 422:
@@ -54,6 +55,7 @@ export default function ScanPage() {
   const [stage, setStage] = useState<Stage>("upload");
   const [ocrResult, setOcrResult] = useState<OcrResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [quotaExhausted, setQuotaExhausted] = useState(false);
   const [ocrProgress, setOcrProgress] = useState<{ current: number; total: number } | null>(null);
 
   const { lastEvent } = useWebSocket(sessionId);
@@ -107,6 +109,7 @@ export default function ScanPage() {
   const handleScan = useCallback(async () => {
     if (!sessionId || photos.length === 0) return;
     setError(null);
+    setQuotaExhausted(false);
     setStage("processing");
     try {
       await uploadPhotos.mutateAsync(photos);
@@ -115,6 +118,7 @@ export default function ScanPage() {
       setStage("results");
     } catch (err) {
       setError(scanErrorMessage(err));
+      setQuotaExhausted(isQuotaError(err));
       setStage("upload");
     }
   }, [sessionId, photos, uploadPhotos, triggerOcr]);
@@ -220,8 +224,15 @@ export default function ScanPage() {
 
       <div className="flex-1 flex flex-col items-center gap-6 p-4 pt-10">
         {error && (
-          <div className="w-full p-3 rounded-[var(--radius-m)] bg-tg-destructive/10 text-sm text-tg-destructive">
-            {error}
+          <div className="w-full flex flex-col gap-3 p-3 rounded-[var(--radius-m)] bg-tg-destructive/10 text-sm text-tg-destructive">
+            <span>{error}</span>
+            {/* Квота — единственная ошибка, из которой есть выход: дать его прямо
+                здесь, а не отправлять человека искать экран покупки. */}
+            {quotaExhausted && (
+              <Button variant="primary" onClick={() => navigate("/quota")}>
+                Купить сканирования
+              </Button>
+            )}
           </div>
         )}
 

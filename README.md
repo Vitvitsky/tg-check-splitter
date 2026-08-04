@@ -440,6 +440,36 @@ Mini App: фото → OCR → редактирование → QR / invite link
 
 React + TypeScript + Tailwind CSS + React Router + TanStack Query.
 
+### Маршруты и входы
+
+Каждый маршрут должен иметь вход, иначе экран — сирота. `/quota` был именно таким:
+покупка сканов работала от начала до конца, но открыть её было нельзя.
+
+```
+/ HomePage
+├─ /scan ──────────► /session/:code/edit ──► /session/:code/vote
+│                       └─ QR-модалка            ├─► /admin ──► /settle ──► /unvoted ─┐
+│                          (приглашение)         │      └─► /share                    │
+│                                                └─► /tip ───► /settle ◄──────────────┘
+├─ /quota   карточка остатка сканов на главной; кнопка при 402 в ScanPage
+├─ /session/:code/{edit|vote|settle|history}   по статусу сессии
+│                       └─ history ──► /share
+└─ /session/:code  JoinPage ──► /vote    вход только извне: ?startapp= и ссылки бота
+```
+
+Проверить после добавления страницы или ссылки:
+
+```bash
+cd webapp/src
+grep -oE 'path="[^"]+"' App.tsx                                     # объявлено
+grep -rhoE 'navigate\(`[^`]+`' pages components                     # достижимо
+```
+
+Страницы принимают `:code` (invite-код) и резолвят его в `session.id` через
+`useSession(code)` до вызова хуков, которым нужен UUID (`useShares`, `useVote`,
+`useWebSocket`). Передать код напрямую — главная ловушка этой схемы; сейчас все
+страницы делают это правильно.
+
 ### Страницы
 
 | Путь | Компонент | Описание |

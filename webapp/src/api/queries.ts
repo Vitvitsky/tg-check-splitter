@@ -22,14 +22,6 @@ export function useSession(inviteCode: string) {
   });
 }
 
-export function useSessionById(sessionId: string) {
-  return useQuery({
-    queryKey: ["session", sessionId],
-    queryFn: () => fetchApi<Session>(`/api/sessions/${sessionId}`),
-    enabled: !!sessionId,
-  });
-}
-
 export function useMySessions() {
   return useQuery({
     queryKey: ["sessions", "my"],
@@ -173,18 +165,6 @@ export function useUpdateItems(sessionId: string) {
       fetchApi<Item[]>(`/api/sessions/${sessionId}/items`, {
         method: "PUT",
         body: JSON.stringify({ items }),
-      }),
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["session"] }),
-  });
-}
-
-export function useDeleteItem(sessionId: string) {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (itemId: string) =>
-      fetchApiNoBody(`/api/sessions/${sessionId}/items/${itemId}`, {
-        method: "DELETE",
       }),
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["session"] }),

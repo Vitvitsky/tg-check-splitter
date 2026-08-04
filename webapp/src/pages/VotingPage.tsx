@@ -5,6 +5,7 @@ import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
 import { Header, Card, Separator, Avatar, Button, CtaBar } from "@/components/ui";
 import { currencySymbol } from "@/lib/currency";
+import { apiErrorMessage, isSettledError } from "@/lib/apiErrors";
 import type { Item } from "@/api/types";
 
 export default function VotingPage() {
@@ -22,6 +23,7 @@ export default function VotingPage() {
   const currentUserId = user?.id ?? 0;
 
   const [optimisticVotes, setOptimisticVotes] = useState<Record<string, number>>({});
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!session) return;
@@ -58,13 +60,18 @@ export default function VotingPage() {
           setOptimisticVotes((prev) => ({ ...prev, [itemId]: result.quantity }));
           if (result.overflow_prevented) haptic.notificationOccurred("warning");
         },
-        onError: () => {
+        onError: (err) => {
           setOptimisticVotes((prev) => { const next = { ...prev }; delete next[itemId]; return next; });
           haptic.notificationOccurred("error");
+          // До этого ошибка проглатывалась: оптимистичный голос откатывался, и на
+          // экране просто ничего не происходило. С 409 на рассчитанном чеке это
+          // выглядело как молчаливо сломанная кнопка.
+          setError(apiErrorMessage(err));
+          if (isSettledError(err) && code) navigate(`/session/${code}/history`, { replace: true });
         },
       });
     },
-    [sessionId, haptic, voteMutation],
+    [sessionId, haptic, voteMutation, code, navigate],
   );
 
   const handleClaim = useCallback(
@@ -165,6 +172,10 @@ export default function VotingPage() {
           ))}
         </Card>
       </div>
+
+      {error && (
+        <p className="px-4 pb-2 text-center text-sm text-tg-destructive">{error}</p>
+      )}
 
       {/* CTA */}
       <CtaBar>

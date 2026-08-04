@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useSession, useResolveUnvoted } from "@/api/queries";
+import { apiErrorMessage } from "@/lib/apiErrors";
 import { Header, Card, SectionLabel, Button, CtaBar } from "@/components/ui";
 
 export default function UnvotedItemsPage() {
@@ -9,6 +10,7 @@ export default function UnvotedItemsPage() {
   const { data: session, isLoading } = useSession(code ?? "");
 
   const [decisions, setDecisions] = useState<Record<string, "split" | "remove">>({});
+  const [error, setError] = useState<string | null>(null);
   const resolveMutation = useResolveUnvoted(session?.id ?? "");
 
   const currency = session?.currency ?? "RUB";
@@ -24,8 +26,17 @@ export default function UnvotedItemsPage() {
   }, []);
 
   const handleContinue = useCallback(async () => {
+    setError(null);
     if (Object.keys(decisions).length > 0 && session?.id) {
-      await resolveMutation.mutateAsync(decisions);
+      try {
+        await resolveMutation.mutateAsync(decisions);
+      } catch (err) {
+        // Раньше здесь не было catch: отклонённый промис оставался необработанным, а
+        // переход на расчёт происходил всё равно — как будто нераспределённые позиции
+        // разобрались.
+        setError(apiErrorMessage(err));
+        return;
+      }
     }
     navigate(`/session/${code}/settle`);
   }, [navigate, code, decisions, session?.id, resolveMutation]);
@@ -103,6 +114,10 @@ export default function UnvotedItemsPage() {
           Reopen Voting
         </button>
       </div>
+
+      {error && (
+        <p className="px-4 pb-2 text-center text-sm text-tg-destructive">{error}</p>
+      )}
 
       <CtaBar>
         <Button

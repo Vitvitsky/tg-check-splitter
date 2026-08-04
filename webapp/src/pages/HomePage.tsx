@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useMySessions, useCreateSession, useClearHistory } from "@/api/queries";
+import { useMySessions, useCreateSession, useClearHistory, useQuota } from "@/api/queries";
 import { Header, Card, SectionLabel, Separator } from "@/components/ui";
 import SessionCard from "@/components/SessionCard";
 
@@ -13,6 +13,7 @@ const STATUS_ROUTE: Record<string, string> = {
 export default function HomePage() {
   const navigate = useNavigate();
   const { data: sessions, isLoading } = useMySessions();
+  const { data: quota } = useQuota();
   const createSession = useCreateSession();
   const clearHistory = useClearHistory();
 
@@ -90,6 +91,38 @@ export default function HomePage() {
           </>
         ) : (
           <EmptyState />
+        )}
+
+        {/* Остаток сканов. Единственный вход на /quota — без него экран покупки был
+            сиротой, и сообщение "лимит исчерпан" вело в никуда. */}
+        {quota && (
+          <Card
+            className="flex items-center justify-between p-4"
+            onClick={() => navigate("/quota")}
+            ariaLabel="Остаток сканов, открыть покупку"
+          >
+            <div>
+              <p className="text-sm font-medium text-tg-text">Сканирования</p>
+              <p className="text-[13px] text-tg-hint">
+                {quota.free_scans_left > 0
+                  ? `${quota.free_scans_left} бесплатных осталось`
+                  : quota.paid_scans > 0
+                    ? `${quota.paid_scans} оплаченных осталось`
+                    : "Лимит исчерпан"}
+              </p>
+            </div>
+            <span
+              className={`rounded-full px-3 py-1 text-sm font-semibold ${
+                quota.free_scans_left + quota.paid_scans > 0
+                  ? "bg-tg-secondary-bg text-tg-text"
+                  : "bg-tg-button text-tg-button-text"
+              }`}
+            >
+              {quota.free_scans_left + quota.paid_scans > 0
+                ? quota.free_scans_left + quota.paid_scans
+                : "Купить"}
+            </span>
+          </Card>
         )}
       </div>
 

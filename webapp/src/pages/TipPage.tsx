@@ -1,11 +1,12 @@
 import { useState, useCallback, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { useSession, useSetTip, useConfirm, useMyShare } from "@/api/queries";
+import { useSession, useSetTip, useConfirm, useUnconfirm, useMyShare } from "@/api/queries";
 import { useWebSocket } from "@/hooks/useWebSocket";
 import { useTelegramUser, useHaptic } from "@/hooks/useTelegram";
 import { Header, Card, SectionLabel, Separator, Chip, ReceiptItem, Button, CtaBar } from "@/components/ui";
 import CustomTipSheet from "@/components/sheets/CustomTipSheet";
 import { formatMoney } from "@/lib/currency";
+import { apiErrorMessage } from "@/lib/apiErrors";
 
 const TIP_PRESETS = [0, 10, 15, 20];
 
@@ -22,6 +23,7 @@ export default function TipPage() {
 
   const setTipMutation = useSetTip(sessionId);
   const confirmMutation = useConfirm(sessionId);
+  const unconfirmMutation = useUnconfirm(sessionId);
   const { data: myShare } = useMyShare(sessionId);
 
   const currentUserId = user?.id ?? 0;
@@ -31,6 +33,7 @@ export default function TipPage() {
   const [isConfirmed, setIsConfirmed] = useState(false);
   const [tipSaved, setTipSaved] = useState(false);
   const [showCustomTip, setShowCustomTip] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (currentMember?.tip_percent != null) setTipPercent(currentMember.tip_percent);
@@ -55,15 +58,31 @@ export default function TipPage() {
   const handleConfirm = useCallback(async () => {
     if (!sessionId) return;
     haptic.impactOccurred("medium");
+    setError(null);
     try {
       await setTipMutation.mutateAsync(tipPercent);
       await confirmMutation.mutateAsync();
       setIsConfirmed(true);
       haptic.notificationOccurred("success");
-    } catch {
+    } catch (err) {
       haptic.notificationOccurred("error");
+      setError(apiErrorMessage(err));
     }
   }, [sessionId, tipPercent, setTipMutation, confirmMutation, haptic]);
+
+  // Отмена подтверждения. Эндпоинт и хук существовали с самого начала, но кнопки не
+  // было: подтвердил — и до расчёта уже ничего не поменять.
+  const handleUnconfirm = useCallback(async () => {
+    if (!sessionId) return;
+    haptic.impactOccurred("light");
+    setError(null);
+    try {
+      await unconfirmMutation.mutateAsync();
+      setIsConfirmed(false);
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    }
+  }, [sessionId, unconfirmMutation, haptic]);
 
   const isAdmin = session?.admin_tg_id === currentUserId;
   const currency = session?.currency ?? "RUB";
@@ -209,23 +228,46 @@ export default function TipPage() {
         </Card>
       </div>
 
+      {error && (
+        <p className="px-4 pb-2 text-center text-sm text-tg-destructive">{error}</p>
+      )}
+
       {/* CTA */}
       <CtaBar>
-        <Button
-          variant="main-action"
-          className="w-full"
-          disabled={confirmMutation.isPending || setTipMutation.isPending || myItems.length === 0}
-          onClick={handleConfirm}
-        >
-          {confirmMutation.isPending || setTipMutation.isPending ? (
-            <span className="flex items-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
-              Saving...
-            </span>
-          ) : (
-            "Confirm & Pay"
-          )}
-        </Button>
+        {isConfirmed ? (
+          <div className="flex w-full flex-col gap-2">
+            <div className="flex items-center justify-center gap-2 py-2 text-sm font-semibold text-success">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M20 6L9 17l-5-5" />
+              </svg>
+              Выбор подтверждён — ждём остальных
+            </div>
+            <Button
+              variant="secondary"
+              className="w-full"
+              disabled={unconfirmMutation.isPending}
+              onClick={handleUnconfirm}
+            >
+              {unconfirmMutation.isPending ? "Отменяем..." : "Изменить выбор"}
+            </Button>
+          </div>
+        ) : (
+          <Button
+            variant="main-action"
+            className="w-full"
+            disabled={confirmMutation.isPending || setTipMutation.isPending || myItems.length === 0}
+            onClick={handleConfirm}
+          >
+            {confirmMutation.isPending || setTipMutation.isPending ? (
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                Saving...
+              </span>
+            ) : (
+              "Confirm & Pay"
+            )}
+          </Button>
+        )}
       </CtaBar>
 
       {/* Custom Tip Sheet */}

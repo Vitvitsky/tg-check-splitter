@@ -190,6 +190,30 @@ and 1–3 MB in practice.
 The remaining obstacle to running more than one API worker is `ConnectionManager` in
 `api/ws.py` — broadcasts only reach clients attached to the same process.
 
+## Every route needs a way in
+
+Twelve routes, and `/quota` had no inbound navigation at all — `useQuota` and
+`usePurchaseScans` were called only from inside the page nothing linked to. The Stars
+purchase worked end to end and could not be reached, while ScanPage's out-of-quota
+message pointed at it. Monetisation was unreachable from the UI.
+
+It now has two entrances (the quota card on HomePage, the button on a 402 in ScanPage),
+and `/session/:code/share` has one during voting instead of only after settlement.
+`/session/:code` is deliberately entered from outside only — `?startapp=` and bot links.
+
+Worth re-running after adding a page or a link:
+
+```bash
+cd webapp/src
+grep -oE 'path="[^"]+"' App.tsx                       # declared
+grep -rhoE 'navigate\(`[^`]+`|navigate\("[^"]+"' pages components   # reachable
+```
+
+Pages resolve `:code` (an invite code) to `session.id` via `useSession(code)` before
+calling any hook that takes a session id — `useShares`, `useVote`, `useWebSocket` and
+friends all want the UUID. Passing the code straight through is the easy mistake here;
+every page currently does it correctly.
+
 ## SPA routing depends on the API's fallback
 
 The frontend uses `BrowserRouter`, so `/session/<code>/vote` is a real URL a user can
