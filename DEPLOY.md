@@ -7,7 +7,8 @@
 > схлопывает дубли в `session_members`, `item_votes` и `payments` (см. README →
 > «Правила целостности»). Она удаляет строки — снимите дамп до `alembic upgrade head`:
 > `docker compose exec db pg_dump -U user checksplitter > backup.sql`.
-> `entrypoint.sh` прогоняет миграции сам при старте контейнера.
+> Миграции прогоняет одноразовый сервис `migrate` — он стартует первым, а `api` и `bot`
+> ждут его успешного завершения.
 
 ## Шаг 1: токены в .env
 
@@ -32,8 +33,8 @@ curl -I https://tg-check-splitter.serge-w.tech
 
 ```bash
 docker compose up -d --build
-docker compose ps
-docker compose logs app --tail=50
+docker compose ps -a          # -a обязательно: migrate уже вышел с кодом 0
+docker compose logs migrate api bot --tail=50
 ```
 
 ## Шаг 4: BotFather
@@ -44,7 +45,7 @@ docker compose logs app --tail=50
 
 ```bash
 sudo journalctl -u nginx -n 50 --no-pager
-docker compose logs app --tail=50
+docker compose logs migrate api bot --tail=50
 sudo certbot certificates
 docker compose up -d --build --force-recreate
 ```

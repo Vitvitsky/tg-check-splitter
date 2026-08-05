@@ -196,7 +196,7 @@ tg-check-splitter/
 
 ### Правила целостности
 
-Заданы в `bot/models/` и в миграции `f1a2b3c4d5e6`; и то и другое обязательно —
+Заданы в `core/models/` и в миграции `f1a2b3c4d5e6`; и то и другое обязательно —
 ORM-каскад держит согласованной сессию SQLAlchemy, `ON DELETE` в БД покрывает
 массовые удаления мимо ORM.
 
@@ -543,7 +543,7 @@ uv run pytest
 uv run pytest tests/test_calculator.py::test_shared_dish -v
 
 # С покрытием
-uv run pytest --cov=bot --cov=api
+uv run pytest --cov=core --cov=bot --cov=api
 ```
 
 Тесты используют `aiosqlite` и fixture `db_session` из `conftest.py`. Конфигурация lazy, поэтому `.env` не требуется.
@@ -574,8 +574,8 @@ DATABASE_URL="postgresql+asyncpg://user:password@127.0.0.1:5433/migtest" uv run 
 ## Линтинг
 
 ```bash
-uv run ruff check bot/ api/ tests/
-uv run ruff format bot/ api/ tests/
+uv run ruff check core/ bot/ api/ tests/
+uv run ruff format core/ bot/ api/ tests/
 ```
 
 ---
@@ -663,7 +663,7 @@ uv run alembic current
 INFO bot.handlers.start: user_id=123456 /start
 INFO bot.handlers.check: user_id=123456 OCR start
 INFO api.routes.voting: user_id=123456 vote session=abc item=def qty=2
-INFO bot.services.ocr: OCR: processing photo 1/2
+INFO core.services.ocr: OCR: processing photo 1/2
 ```
 
 Уровень логирования: `INFO` (настраивается в `bot/__main__.py`).

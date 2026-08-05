@@ -59,8 +59,8 @@ their own session, so there was always a child row to orphan).
 All test engines therefore come from `make_test_engine()` in `tests/db.py`. Never call
 `create_async_engine` directly in a test — that silently opts back out of enforcement.
 
-A second isolation trap, same shape: application modules do `from bot.config import
-get_settings`, which binds the function by value, so `patch("bot.config.get_settings")`
+A second isolation trap, same shape: application modules do `from core.config import
+get_settings`, which binds the function by value, so `patch("core.config.get_settings")`
 never reaches them — they kept reading the developer's own `.env`. `test_get_quota`
 asserts a free allowance of 3 and began failing the moment someone set
 `FREE_SCANS_PER_MONTH=5` locally, with no code change at all. An autouse fixture now
@@ -320,7 +320,10 @@ not a bug in the script.
 Three services from one image: `migrate` (one-shot, `alembic upgrade head`), `api` and
 `bot`. Both depend on `migrate` completing and on nothing else — killing one does not
 touch the other. There is no `entrypoint.sh` any more; each service carries its own
-`command`.
+`command`. The `api` healthcheck is observational only: Docker does not restart an
+unhealthy container, and nothing declares `depends_on: api: service_healthy`, so a hung
+but alive uvicorn stays hung — the probe tells `docker compose ps` about it, it does not
+act on it.
 
 `restart: unless-stopped` will not bring a service back after `docker compose kill` or
 `docker compose stop`: the daemon marks those containers manually stopped and skips the
@@ -331,7 +334,10 @@ used `docker compose exec bot python -c "os.kill(<bot pid>, SIGKILL)"`, and only
 `docker compose up -d`.
 
 **The frontend is baked into the image**, so a `webapp/` change is not live until
-`docker compose up -d --build api`. Rebuilding is not enough on its own either: Telegram
+`docker compose up -d --build api`. That form is right for `webapp/` only — it rebuilds
+the shared image but recreates just `api` (and `migrate`), leaving `bot` on the old one,
+so a change in `core/` or `bot/` needs `docker compose up -d --build` with no service
+named. Rebuilding is not enough on its own either: Telegram
 caches the Mini App hard, and the phone must clear its cache before it sees the new bundle.
 Both steps look identical to "the fix did not work" — verify instead by asking the server
 which bundle it serves, since Vite hashes every chunk:
