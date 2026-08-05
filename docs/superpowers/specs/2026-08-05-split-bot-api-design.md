@@ -79,7 +79,9 @@ services:
               "--factory", "--host", "0.0.0.0", "--port", "8005"]
     ports: ["8005:8005"]
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8005/api/health || exit 1"]
+      # curl в python:3.12-slim НЕТ — проверено. Проба через stdlib urllib.
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/api/health').read()"]
     restart: unless-stopped
     depends_on: { migrate: { condition: service_completed_successfully } }
 
