@@ -31,7 +31,7 @@ jobs:
 
     env:
       # Без этой переменной tests/test_concurrency.py молча пропускается — см. шаг «страж».
-      TEST_DATABASE_URL: postgresql+asyncpg://user:password@127.0.0.1:5432/racetest
+      TEST_DATABASE_URL_TYPO: postgresql+asyncpg://user:password@127.0.0.1:5432/racetest
 
     steps:
       - uses: actions/checkout@v4
