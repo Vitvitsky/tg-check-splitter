@@ -30,8 +30,4 @@ COPY locales/ locales/
 # Copy built frontend
 COPY --from=frontend /build/dist/ webapp/dist/
 
-# Copy entrypoint
-COPY entrypoint.sh .
-RUN chmod +x entrypoint.sh
-
-CMD ["./entrypoint.sh"]
+# No CMD: each compose service (migrate / api / bot) carries its own command.

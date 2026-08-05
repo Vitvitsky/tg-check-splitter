@@ -1,15 +1,45 @@
+x-app-base: &app-base
+  build: .
+  image: tg-check-splitter-app
+  env_file: .env
+  environment:
+    DATABASE_URL: postgresql+asyncpg://user:password@db:5432/checksplitter
+
 services:
-  app:
-    build: .
-    env_file: .env
-    environment:
-      DATABASE_URL: postgresql+asyncpg://user:password@db:5432/checksplitter
-    ports:
-      - "8005:8005"
+  migrate:
+    <<: *app-base
+    command: ["uv", "run", "alembic", "upgrade", "head"]
+    restart: "no"
     depends_on:
       db:
         condition: service_healthy
+
+  api:
+    <<: *app-base
+    command: ["uv", "run", "uvicorn", "api.app:create_app",
+              "--factory", "--host", "0.0.0.0", "--port", "8005"]
+    ports:
+      - "8005:8005"
+    healthcheck:
+      # curl в python:3.12-slim нет — проба через stdlib urllib.
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8005/api/health').read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+
+  bot:
+    <<: *app-base
+    command: ["uv", "run", "python", "-m", "bot"]
+    restart: unless-stopped
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
 
   db:
     image: postgres:17-alpine

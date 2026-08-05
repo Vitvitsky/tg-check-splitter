@@ -23,7 +23,7 @@ uv run python -m api
 # Tests / lint
 uv run pytest
 uv run pytest tests/test_calculator.py::test_shared_dish -v
-uv run ruff check bot/ api/ tests/ && uv run ruff format bot/ api/ tests/
+uv run ruff check core/ bot/ api/ tests/ && uv run ruff format core/ bot/ api/ tests/
 
 # Migrations
 uv run alembic revision --autogenerate -m "description"
@@ -276,9 +276,13 @@ There is no devtools on the phone, so the server is the instrument. What actuall
 every bug above:
 
 ```bash
-docker logs tg-check-splitter-app-1 2>&1 | grep -E 'POST /api/sessions/[^ ]+/(vote|tip|confirm)'
+docker logs tg-check-splitter-api-1 2>&1 | grep -E 'POST /api/sessions/[^ ]+/(vote|tip|confirm)'
 docker exec tg-check-splitter-db-1 psql -U user -d checksplitter -c "select * from item_votes;"
 ```
+
+The bot and the API are separate services now, so `docker compose logs bot` and
+`docker compose logs api` are separate too — a Mini App bug never has to be read out of
+polling noise.
 
 Two tricks worth knowing. **A lazy chunk request proves navigation happened** — the routes
 are `lazy()`, so if `GET /assets/TipPage-*.js` never appears, the client never reached
@@ -300,8 +304,8 @@ unit, overbilling the table. If fractional shares are ever wanted, that is a sch
 ## Backlog lives in docs/BACKLOG.md
 
 What is deliberately not built, each with the trigger that would justify building it —
-multi-worker + Redis pub/sub, a `user_activity` table for stable DAU/MAU, splitting the
-bot from the API, rewriting the backend in Rust, and the resource arithmetic behind them
+multi-worker + Redis pub/sub, a `user_activity` table for stable DAU/MAU, rewriting the
+backend in Rust, and the resource arithmetic behind them
 (measured, not estimated). Read it before adding infrastructure or changing the stack; the
 answers to "should we add Redis" and "should this be Rust" are in there with numbers.
 
@@ -313,12 +317,21 @@ not a bug in the script.
 
 ## Deployment notes
 
-`entrypoint.sh` runs migrations, then the bot and uvicorn in the same container with
-`wait -n`. Either process dying takes the container with it — splitting them is backlog
-item F.
+Three services from one image: `migrate` (one-shot, `alembic upgrade head`), `api` and
+`bot`. Both depend on `migrate` completing and on nothing else — killing one does not
+touch the other. There is no `entrypoint.sh` any more; each service carries its own
+`command`.
+
+`restart: unless-stopped` will not bring a service back after `docker compose kill` or
+`docker compose stop`: the daemon marks those containers manually stopped and skips the
+restart policy. A real crash *is* restarted. So verifying the policy means killing the
+process inside the container, not the container itself — the acceptance run for the split
+used `docker compose exec bot python -c "os.kill(<bot pid>, SIGKILL)"`, and only then did
+`RestartCount` go to 1. After a deliberate `kill`/`stop`, put the service back with
+`docker compose up -d`.
 
 **The frontend is baked into the image**, so a `webapp/` change is not live until
-`docker compose up -d --build app`. Rebuilding is not enough on its own either: Telegram
+`docker compose up -d --build api`. Rebuilding is not enough on its own either: Telegram
 caches the Mini App hard, and the phone must clear its cache before it sees the new bundle.
 Both steps look identical to "the fix did not work" — verify instead by asking the server
 which bundle it serves, since Vite hashes every chunk:
