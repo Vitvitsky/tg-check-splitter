@@ -28,7 +28,7 @@ def spa_client(tmp_path, test_settings, monkeypatch):
     monkeypatch.setattr(api_app, "WEBAPP_DIST", dist)
 
     with (
-        patch("bot.config.get_settings", return_value=test_settings),
+        patch("core.config.get_settings", return_value=test_settings),
         patch("api.auth.get_settings", return_value=test_settings),
     ):
         app = api_app.create_app()

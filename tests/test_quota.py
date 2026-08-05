@@ -1,8 +1,8 @@
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from bot.models.user_quota import UserQuota
-from bot.services.quota import QuotaService
+from core.models.user_quota import UserQuota
+from core.services.quota import QuotaService
 
 
 @pytest.fixture

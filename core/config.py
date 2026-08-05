@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     free_scans_per_month: int = 3
     scan_price_stars: int = 1
 
-    # Connection pool. See get_engine() in bot/db.py for why SQLAlchemy's default of 5
+    # Connection pool. See get_engine() in core/db.py for why SQLAlchemy's default of 5
     # was too small: opening a connection costs ~80 ms here, a query ~0.2 ms.
     db_pool_size: int = 20
     db_max_overflow: int = 10

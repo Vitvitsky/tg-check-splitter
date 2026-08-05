@@ -15,10 +15,10 @@ from aiogram.types import Message
 from aiogram.utils.i18n import gettext as _, lazy_gettext as __
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import get_settings
+from core.config import get_settings
 from bot.keyboards.check import main_menu_kb, webapp_button_kb
-from bot.services.quota import QuotaService
-from bot.services.session import SessionService
+from core.services.quota import QuotaService
+from core.services.session import SessionService
 
 logger = logging.getLogger(__name__)
 router = Router()

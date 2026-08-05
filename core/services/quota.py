@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models.user_quota import UserQuota
+from core.models.user_quota import UserQuota
 
 logger = logging.getLogger(__name__)
 

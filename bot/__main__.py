@@ -3,7 +3,7 @@ import logging
 
 from aiogram import Bot, Dispatcher
 
-from bot.config import get_settings
+from core.config import get_settings
 from bot.handlers import payment, start
 from bot.i18n import i18n_middleware
 from bot.middlewares import DbSessionMiddleware

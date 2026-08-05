@@ -24,9 +24,9 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from bot.models.base import Base
-from bot.models.session import ItemVote, SessionItem
-from bot.services.session import SessionService
+from core.models.base import Base
+from core.models.session import ItemVote, SessionItem
+from core.services.session import SessionService
 
 TEST_DATABASE_URL = os.getenv("TEST_DATABASE_URL")
 
@@ -122,7 +122,7 @@ async def test_claim_settlement_is_won_by_exactly_one_caller(pg_sessionmaker):
     assert sum(claims) == 1, f"{sum(claims)} callers believed they settled the session"
 
     async with pg_sessionmaker() as db:
-        from bot.models.session import Session
+        from core.models.session import Session
 
         settled = await db.get(Session, session_id)
         assert settled.status == "settled"

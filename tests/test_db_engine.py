@@ -11,8 +11,8 @@ from unittest.mock import patch
 
 import pytest
 
-import bot.db as db
-from bot.config import Settings
+import core.db as db
+from core.config import Settings
 
 
 @pytest.fixture(autouse=True)
@@ -30,7 +30,7 @@ def _settings(url: str, **kwargs) -> Settings:
 
 
 def test_sqlite_engine_builds_without_pool_arguments():
-    with patch("bot.config.get_settings", return_value=_settings("sqlite+aiosqlite://")):
+    with patch("core.config.get_settings", return_value=_settings("sqlite+aiosqlite://")):
         engine = db.get_engine()
     assert engine is not None
 
@@ -39,7 +39,7 @@ def test_postgres_engine_uses_the_configured_pool():
     settings = _settings(
         "postgresql+asyncpg://u:p@localhost:5432/x", db_pool_size=7, db_max_overflow=3
     )
-    with patch("bot.config.get_settings", return_value=settings):
+    with patch("core.config.get_settings", return_value=settings):
         engine = db.get_engine()
 
     # A connection costs ~400x a query on this deployment, so the pool must actually be
@@ -51,7 +51,7 @@ def test_postgres_engine_uses_the_configured_pool():
 def test_postgres_engine_pre_pings():
     """Long-lived processes must not hand out a connection the server already dropped."""
     with patch(
-        "bot.config.get_settings",
+        "core.config.get_settings",
         return_value=_settings("postgresql+asyncpg://u:p@localhost:5432/x"),
     ):
         engine = db.get_engine()

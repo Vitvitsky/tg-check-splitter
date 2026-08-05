@@ -20,11 +20,11 @@ from api.schemas import (
     PhotoOut,
 )
 from api.ws import EVENT_ITEMS_UPDATED, EVENT_OCR_PROGRESS
-from bot.config import get_settings
-from bot.models.session import Session
-from bot.services.ocr import OcrService
-from bot.services.quota import QuotaService
-from bot.services.session import SessionService
+from core.config import get_settings
+from core.models.session import Session
+from core.services.ocr import OcrService
+from core.services.quota import QuotaService
+from core.services.session import SessionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sessions/{session_id}", tags=["ocr"])

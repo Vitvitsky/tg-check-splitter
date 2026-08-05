@@ -11,8 +11,8 @@ from __future__ import annotations
 import pytest
 from sqlalchemy import event, select
 
-from bot.models.session import Session, SessionItem, SessionMember
-from bot.services.session import SessionService
+from core.models.session import Session, SessionItem, SessionMember
+from core.services.session import SessionService
 from tests.test_api.conftest import make_init_data
 
 USER = 12345

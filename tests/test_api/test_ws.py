@@ -70,7 +70,7 @@ async def test_broadcast_to_empty_session():
 async def test_ws_manager_initialized(test_settings):
     """Verify ws_manager is available on app state after create_app."""
     with (
-        patch("bot.config.get_settings", return_value=test_settings),
+        patch("core.config.get_settings", return_value=test_settings),
         patch("api.auth.get_settings", return_value=test_settings),
     ):
         from api.app import create_app

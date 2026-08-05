@@ -14,9 +14,9 @@ from aiogram.utils.i18n import gettext as _
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.config import get_settings
-from bot.models.payment import Payment
-from bot.services.quota import QuotaService
+from core.config import get_settings
+from core.models.payment import Payment
+from core.services.quota import QuotaService
 
 logger = logging.getLogger(__name__)
 router = Router()

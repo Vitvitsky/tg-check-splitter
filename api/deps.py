@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.db import get_async_session
+from core.db import get_async_session
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:

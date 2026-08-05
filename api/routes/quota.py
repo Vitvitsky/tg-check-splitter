@@ -7,8 +7,8 @@ from api.auth import TelegramUser, get_current_user
 from api.deps import get_db
 from api.schemas import InvoiceIn, InvoiceOut, QuotaOut
 from api.services.notifications import NotificationService
-from bot.config import get_settings
-from bot.services.quota import QuotaService
+from core.config import get_settings
+from core.services.quota import QuotaService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/quota", tags=["quota"])

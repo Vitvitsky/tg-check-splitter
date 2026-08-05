@@ -11,7 +11,7 @@ from urllib.parse import parse_qs
 
 from fastapi import Depends, HTTPException, Request
 
-from bot.config import get_settings
+from core.config import get_settings
 
 _MAX_AUTH_AGE_SECONDS = 86400  # 24 hours
 

@@ -20,6 +20,7 @@ COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-dev --no-install-project
 
 # Copy application code
+COPY core/ core/
 COPY bot/ bot/
 COPY api/ api/
 COPY alembic/ alembic/

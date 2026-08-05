@@ -15,7 +15,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from bot.models.base import Base
+from core.models.base import Base
 
 
 def _utcnow() -> datetime:

@@ -7,7 +7,7 @@ four units — the table was billed more than the receipt said.
 
 import pytest
 
-from bot.services.session import SessionService
+from core.services.session import SessionService
 
 
 async def _item(db, *, quantity: int, price=900):

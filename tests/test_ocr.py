@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from bot.services.ocr import OcrItem, OcrResult, OcrService
+from core.services.ocr import OcrItem, OcrResult, OcrService
 
 
 @pytest.fixture

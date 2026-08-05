@@ -12,8 +12,8 @@ from api.routes.sessions import router as sessions_router
 from api.routes.voting import router as voting_router
 from api.routes.ws import router as ws_router
 from api.ws import ConnectionManager
-from bot.config import get_settings
-from bot.db import get_engine
+from core.config import get_settings
+from core.db import get_engine
 
 WEBAPP_DIST = Path(__file__).resolve().parent.parent / "webapp" / "dist"
 

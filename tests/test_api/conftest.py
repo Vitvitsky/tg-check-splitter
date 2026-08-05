@@ -21,7 +21,7 @@ import httpx
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from bot.models.base import Base
+from core.models.base import Base
 from tests.db import make_test_engine
 from tests.env import TEST_BOT_TOKEN, TEST_FREE_SCANS, apply_test_env
 
@@ -55,7 +55,7 @@ def _hermetic_env(monkeypatch):
     """Keep the developer's own .env out of every test. See tests/env.py."""
     apply_test_env(monkeypatch)
     yield
-    from bot.config import get_settings
+    from core.config import get_settings
 
     get_settings.cache_clear()
 
@@ -63,7 +63,7 @@ def _hermetic_env(monkeypatch):
 @pytest.fixture
 def test_settings():
     """Settings instance with test bot token — no .env file required."""
-    from bot.config import Settings
+    from core.config import Settings
 
     return Settings(
         bot_token=TEST_BOT_TOKEN,
@@ -105,7 +105,7 @@ async def client(db_session, test_settings):
     # Monkeypatch get_settings globally so that *all* call sites
     # (including direct calls like `get_settings().bot_token` in auth.py
     # and `get_settings()` in create_app) receive the test settings.
-    # We patch both `bot.config` (canonical location) and `api.auth`
+    # We patch both `core.config` (canonical location) and `api.auth`
     # (already-imported reference) to ensure the test settings are used
     # regardless of import order.
     from unittest.mock import AsyncMock
@@ -115,7 +115,7 @@ async def client(db_session, test_settings):
     mock_notifier.notify_settle = AsyncMock()
 
     with (
-        patch("bot.config.get_settings", return_value=test_settings),
+        patch("core.config.get_settings", return_value=test_settings),
         patch("api.auth.get_settings", return_value=test_settings),
         patch("api.routes.sessions.NotificationService", return_value=mock_notifier),
     ):

@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from bot.utils import format_price
+from core.utils import format_price
 
 
 def test_format_price_rub():

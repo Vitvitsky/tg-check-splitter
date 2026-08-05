@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from sqlalchemy import BigInteger, DateTime, ForeignKey, Integer, String, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from bot.models.base import Base
+from core.models.base import Base
 
 
 def _utcnow() -> datetime:

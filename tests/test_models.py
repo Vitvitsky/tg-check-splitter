@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from bot.models.session import ItemVote, Session, SessionItem, SessionMember, SessionPhoto
+from core.models.session import ItemVote, Session, SessionItem, SessionMember, SessionPhoto
 
 
 async def test_create_session(db_session):

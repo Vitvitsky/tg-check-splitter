@@ -1,6 +1,6 @@
 import pytest
 
-from bot.services.session import SessionService
+from core.services.session import SessionService
 
 
 @pytest.fixture

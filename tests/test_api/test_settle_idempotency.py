@@ -13,8 +13,8 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import select
 
-from bot.models.session import Session
-from bot.services.session import SessionService
+from core.models.session import Session
+from core.services.session import SessionService
 from tests.test_api.conftest import make_init_data
 
 ADMIN = 12345

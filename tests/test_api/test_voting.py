@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from bot.services.session import SessionService
+from core.services.session import SessionService
 
 
 # ---------------------------------------------------------------------------

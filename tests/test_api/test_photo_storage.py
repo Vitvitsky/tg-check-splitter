@@ -12,9 +12,9 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from sqlalchemy import select
 
-from bot.models.session import SessionPhoto
-from bot.services.ocr import OcrItem, OcrResult
-from bot.services.session import SessionService
+from core.models.session import SessionPhoto
+from core.services.ocr import OcrItem, OcrResult
+from core.services.session import SessionService
 
 
 @pytest.fixture

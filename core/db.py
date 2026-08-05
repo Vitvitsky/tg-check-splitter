@@ -21,7 +21,7 @@ def get_engine():
     """
     global _engine
     if _engine is None:
-        from bot.config import get_settings
+        from core.config import get_settings
 
         settings = get_settings()
         url = settings.database_url

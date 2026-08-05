@@ -17,9 +17,9 @@ from api.ws import (
 )
 from api.deps import get_db
 from api.schemas import ShareOut, TipIn, UnvotedDecisionIn, VoteIn
-from bot.models.session import Session, SessionMember
-from bot.services.calculator import calculate_shares, calculate_user_share
-from bot.services.session import SessionService
+from core.models.session import Session, SessionMember
+from core.services.calculator import calculate_shares, calculate_user_share
+from core.services.session import SessionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(tags=["voting"])

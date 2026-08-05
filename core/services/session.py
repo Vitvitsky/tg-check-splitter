@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from bot.models.session import (
+from core.models.session import (
     ItemVote,
     Session,
     SessionItem,

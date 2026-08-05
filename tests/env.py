@@ -2,9 +2,9 @@
 
 Application code imports the settings accessor by value::
 
-    from bot.config import get_settings   # binds the function into this module
+    from core.config import get_settings   # binds the function into this module
 
-so ``patch("bot.config.get_settings")`` does **not** reach those call sites — they keep
+so ``patch("core.config.get_settings")`` does **not** reach those call sites — they keep
 calling the real function, which reads the developer's own ``.env``. That made test
 results depend on the machine they ran on: `test_get_quota` asserts a free allowance of
 3 and started failing the moment a developer set ``FREE_SCANS_PER_MONTH=5`` in their
@@ -34,7 +34,7 @@ TEST_ENV: dict[str, str] = {
 
 def apply_test_env(monkeypatch) -> None:
     """Pin the environment and drop any settings cached from a previous value."""
-    from bot.config import get_settings
+    from core.config import get_settings
 
     for key, value in TEST_ENV.items():
         monkeypatch.setenv(key, value)

@@ -14,9 +14,9 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 
-from bot.services.ocr import OcrItem, OcrResult
-from bot.services.quota import QuotaService
-from bot.services.session import SessionService
+from core.services.ocr import OcrItem, OcrResult
+from core.services.quota import QuotaService
+from core.services.session import SessionService
 
 
 @pytest.fixture

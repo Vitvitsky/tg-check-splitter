@@ -1,6 +1,6 @@
 from decimal import Decimal
 
-from bot.services.calculator import calculate_shares
+from core.services.calculator import calculate_shares
 
 
 def test_simple_split():

@@ -20,10 +20,10 @@ from api.schemas import (
     ShareOut,
 )
 from api.services.notifications import NotificationService
-from bot.config import get_settings
-from bot.models.session import Session, SessionItem, SessionMember
-from bot.services.calculator import calculate_shares, calculate_user_share
-from bot.services.session import SessionService
+from core.config import get_settings
+from core.models.session import Session, SessionItem, SessionMember
+from core.services.calculator import calculate_shares, calculate_user_share
+from core.services.session import SessionService
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/sessions", tags=["sessions"])

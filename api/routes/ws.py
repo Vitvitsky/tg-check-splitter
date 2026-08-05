@@ -7,8 +7,8 @@ import logging
 from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 
 from api.auth import _parse_telegram_user, validate_init_data
-from bot.config import get_settings
-from bot.db import get_async_session
+from core.config import get_settings
+from core.db import get_async_session
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,7 +37,7 @@ async def websocket_endpoint(
     # Verify user is a member of the session
     async_session_factory = get_async_session()
     async with async_session_factory() as db:
-        from bot.services.session import SessionService
+        from core.services.session import SessionService
 
         svc = SessionService(db)
         member = await svc.get_member(session_id, user.id)

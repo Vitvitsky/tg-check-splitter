@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import BigInteger, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column
 
-from bot.models.base import Base
+from core.models.base import Base
 
 
 class UserQuota(Base):

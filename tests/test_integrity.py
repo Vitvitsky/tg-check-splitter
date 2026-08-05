@@ -9,8 +9,8 @@ import pytest
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
-from bot.models.session import ItemVote, SessionItem, SessionMember
-from bot.services.session import SessionService
+from core.models.session import ItemVote, SessionItem, SessionMember
+from core.services.session import SessionService
 
 
 async def _session_with_item(db, *, admin=1, name="Pizza", price=900, quantity=3):
