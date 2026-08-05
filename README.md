@@ -94,15 +94,18 @@ Multi-stage сборка: Node.js собирает фронтенд, Python-об
 
 ```
 tg-check-splitter/
-├── bot/                    # Telegram-бот (aiogram 3.x) — тонкий слой, см. ниже
-│   ├── handlers/           # Роутеры: start (вход в Mini App), payment (Stars)
+├── core/                   # Общее ядро: ноль зависимостей от aiogram и FastAPI
 │   ├── services/           # Бизнес-логика: ocr, session, calculator, quota
 │   ├── models/             # SQLAlchemy ORM-модели
-│   ├── keyboards/          # Клавиатуры: главное меню + кнопка Mini App
 │   ├── config.py           # Pydantic Settings (lazy init)
 │   ├── db.py               # Async engine + session factory
+│   └── utils.py            # Форматирование денег
+├── bot/                    # Telegram-бот (aiogram 3.x) — тонкий слой, см. ниже
+│   ├── handlers/           # Роутеры: start (вход в Mini App), payment (Stars)
+│   ├── keyboards/          # Клавиатуры: главное меню + кнопка Mini App
 │   ├── middlewares.py      # DB session injection
-│   └── i18n.py             # Gettext/Babel (ru/en)
+│   ├── i18n.py             # Gettext/Babel (ru/en)
+│   └── __main__.py         # Polling
 ├── api/                    # REST API + WebSocket (FastAPI)
 │   ├── routes/             # Эндпоинты: sessions, voting, ocr, quota, ws
 │   ├── services/           # Push-уведомления через Bot API
@@ -122,6 +125,9 @@ tg-check-splitter/
 ├── tools/                  # Скрипты обслуживания
 └── tests/                  # Pytest (SQLite in-memory)
 ```
+
+`api/` и `bot/` — равноправные потребители `core/` и друг о друге не знают: обратных
+импортов нет, между процессами нет ни одного HTTP-вызова, оба ходят прямо в Postgres.
 
 ### Разделение обязанностей: Mini App главный, бот тонкий
 
@@ -661,7 +667,7 @@ uv run alembic current
 
 ```
 INFO bot.handlers.start: user_id=123456 /start
-INFO bot.handlers.check: user_id=123456 OCR start
+INFO api.routes.ocr: user_id=123456 OCR start
 INFO api.routes.voting: user_id=123456 vote session=abc item=def qty=2
 INFO core.services.ocr: OCR: processing photo 1/2
 ```

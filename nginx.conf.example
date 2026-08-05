@@ -1,5 +1,11 @@
 # Example nginx config for Raspberry Pi reverse proxy
 # Place in /etc/nginx/sites-available/ and symlink to sites-enabled/
+#
+# ВНИМАНИЕ: этот пример проксирует с ДРУГОЙ машины (lan-server-ip:8005), а с 2026-08-05
+# docker-compose.yml публикует порт только на 127.0.0.1 — снаружи он не доступен.
+# Для такой схемы придётся вернуть публикацию на 0.0.0.0 и закрыть порт файрволом.
+# Рабочий конфиг этого проекта — nginx/tg-check-splitter.conf: nginx стоит на том же
+# хосте и ходит на 127.0.0.1:8005.
 
 server {
     listen 443 ssl http2;

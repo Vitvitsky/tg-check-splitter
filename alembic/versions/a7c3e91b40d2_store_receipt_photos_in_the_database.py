@@ -14,7 +14,7 @@ already cascades (migration f1a2b3c4d5e6), so photos die with their session. The
 also nulled right after a successful OCR, which is where essentially all of the volume
 goes — a receipt's bytes are needed for minutes, between upload and recognition.
 
-Nullable and deferred (see bot/models/session.py): Session.photos is lazy="selectin", so a
+Nullable and deferred (see core/models/session.py): Session.photos is lazy="selectin", so a
 non-deferred column would attach megabytes of JPEG to every session read.
 
 Revision ID: a7c3e91b40d2

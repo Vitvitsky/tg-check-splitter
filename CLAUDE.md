@@ -325,6 +325,12 @@ unhealthy container, and nothing declares `depends_on: api: service_healthy`, so
 but alive uvicorn stays hung — the probe tells `docker compose ps` about it, it does not
 act on it.
 
+`depends_on` is a `docker compose` concept, not a daemon one, and `migrate` carries
+`restart: "no"`. So a host reboot brings back `api` and `bot` (both `unless-stopped`) but
+*not* `migrate` — which is correct, not a deadlock: they start against the schema the
+last `compose up` already migrated. Migrations run when you deploy, not when the box
+comes back.
+
 `restart: unless-stopped` will not bring a service back after `docker compose kill` or
 `docker compose stop`: the daemon marks those containers manually stopped and skips the
 restart policy. A real crash *is* restarted. So verifying the policy means killing the
