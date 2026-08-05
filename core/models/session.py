@@ -33,6 +33,7 @@ class Session(Base):
     tip_percent: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_utcnow)
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ci_drift_check: Mapped[str | None] = mapped_column(String(8), nullable=True)
 
     # cascade + passive_deletes: children go away with the session. The DB-level
     # ON DELETE CASCADE (see migration f1a2b3c4d5e6) does the actual work; the ORM
