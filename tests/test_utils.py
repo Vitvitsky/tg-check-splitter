@@ -24,3 +24,7 @@ def test_format_price_jpy():
 def test_format_price_unknown():
     assert format_price(100, "PLN") == "100.00 zł"
     assert format_price(100, "XYZ") == "100.00 XYZ"
+
+
+def test_ci_must_fail():
+    assert 1 == 2
