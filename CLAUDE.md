@@ -36,6 +36,12 @@ cd webapp && npm ci && npm run build   # -> webapp/dist/, served by the API
 docker compose up -d db
 ```
 
+Те же четыре команды гоняет CI (`.github/workflows/ci.yml`) на каждый push в `main` и
+каждый PR, плюс две, которых нет локально: он падает, если `tests/test_concurrency.py`
+пропустился (страж против молчаливого `182 passed, 5 skipped`), и если
+`alembic revision --autogenerate` даёт непустую миграцию — модели и схема разъехались.
+CI гоняет Python 3.12, как продакшн-образ; локальный 3.14 не проверяется никем.
+
 ## The Mini App owns the product; the bot does not
 
 `bot/handlers/` is deliberately two files. `start.py` greets and hands invites to the
