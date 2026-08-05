@@ -18,8 +18,9 @@ services:
     <<: *app-base
     command: ["uv", "run", "uvicorn", "api.app:create_app",
               "--factory", "--host", "0.0.0.0", "--port", "8005"]
+    # Только loopback: наружу смотрит host nginx, он проксирует на 127.0.0.1:8005.
     ports:
-      - "8005:8005"
+      - "127.0.0.1:8005:8005"
     healthcheck:
       # curl в python:3.12-slim нет — проба через stdlib urllib.
       test: ["CMD", "python", "-c",
@@ -48,8 +49,10 @@ services:
       POSTGRES_USER: user
       POSTGRES_PASSWORD: password
       POSTGRES_DB: checksplitter
+    # Публикация нужна только тестам конкурентности: TEST_DATABASE_URL ходит с хоста,
+    # изнутри сети база доступна как db:5432. Loopback, а не 0.0.0.0.
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
