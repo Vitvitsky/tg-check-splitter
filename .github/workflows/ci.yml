@@ -1,0 +1,121 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Новый push отменяет незавершённый прогон того же ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: user
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: racetest
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U user -d racetest"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    env:
+      # Без этой переменной tests/test_concurrency.py молча пропускается — см. шаг «страж».
+      TEST_DATABASE_URL: postgresql+asyncpg://user:password@127.0.0.1:5432/racetest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version: "3.12"
+
+      # --extra dev обязателен: pytest и aiosqlite лежат в optional-dependencies,
+      # а не в dependency-groups (там только ruff).
+      - name: Установить зависимости
+        run: uv sync --frozen --extra dev
+
+      - name: ruff check
+        run: uv run ruff check core/ bot/ api/ tests/
+
+      - name: ruff format --check
+        run: uv run ruff format --check core/ bot/ api/ tests/
+
+      - name: Тесты
+        run: uv run pytest -q
+
+      # Тесты конкурентности стерегут _lock_item() и SELECT … FOR UPDATE, то есть деньги,
+      # и пропускаются молча без TEST_DATABASE_URL. Опечатки в переменной хватило бы,
+      # чтобы CI годами показывал зелёное на 182 тестах вместо 187.
+      - name: Конкурентность действительно исполнилась
+        run: |
+          set -o pipefail
+          uv run pytest tests/test_concurrency.py -q | tee /tmp/concurrency.txt
+          if grep -q skipped /tmp/concurrency.txt; then
+            echo "::error::тесты конкурентности пропущены — TEST_DATABASE_URL не доехал до раннера"
+            exit 1
+          fi
+
+      # Миграции PostgreSQL-only (f1a2b3c4d5e6 использует ctid и DELETE … USING), SQLite
+      # их не видит никогда — до этого шага их не проверяло ничто, кроме деплоя.
+      - name: Модели и миграции не разъехались
+        env:
+          BOT_TOKEN: "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz"
+          ZAI_API_KEY: ci
+          DATABASE_URL: postgresql+asyncpg://user:password@127.0.0.1:5432/migcheck
+        run: |
+          set -euo pipefail
+          # Отдельная база: racetest уже засеян таблицами из тестов конкурентности.
+          PGPASSWORD=password psql -h 127.0.0.1 -U user -d racetest -c 'CREATE DATABASE migcheck'
+          uv run alembic upgrade head
+          uv run alembic revision --autogenerate -m ci-drift-check
+          python - <<'PY'
+          import pathlib, re, sys
+
+          newest = max(pathlib.Path("alembic/versions").glob("*.py"), key=lambda p: p.stat().st_mtime)
+          body = re.search(r"def upgrade\(\).*?:\n(.*?)\ndef downgrade", newest.read_text(), re.S)
+          lines = [
+              line.strip()
+              for line in (body.group(1) if body else "").splitlines()
+              if line.strip() and not line.strip().startswith("#")
+          ]
+          if lines != ["pass"]:
+              print("::error::autogenerate дал непустую миграцию — модели и схема разъехались")
+              print("\n".join(lines))
+              sys.exit(1)
+          newest.unlink()
+          PY
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: webapp
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Установить зависимости
+        run: npm ci
+
+      # tsc -b && vite build. Ошибка типов сегодня всплывает только на сборке образа,
+      # то есть через 19 минут и уже во время деплоя.
+      - name: Сборка Mini App
+        run: npm run build
