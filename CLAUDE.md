@@ -325,6 +325,17 @@ unhealthy container, and nothing declares `depends_on: api: service_healthy`, so
 but alive uvicorn stays hung — the probe tells `docker compose ps` about it, it does not
 act on it.
 
+Both published ports are bound to `127.0.0.1` — and that binding is the whole protection,
+because Docker writes its DNAT rules into iptables' `nat` table, which is traversed before
+ufw's `INPUT` chain. A `ufw deny 5433` therefore reads as "denied" and still lets the port
+through; `0.0.0.0:5433->5432` in `docker compose ps` means the database is reachable from
+anywhere that can route to the host, ufw or not. Check with `ss -lntp`, not with the
+firewall's own opinion of itself.
+
+The database port stays published on purpose, though: `tests/test_concurrency.py` reaches
+it from the host through `TEST_DATABASE_URL`. Drop the publication and those tests skip
+silently — see the note above about what that hides.
+
 `depends_on` is a `docker compose` concept, not a daemon one, and `migrate` carries
 `restart: "no"`. So a host reboot brings back `api` and `bot` (both `unless-stopped`) but
 *not* `migrate` — which is correct, not a deadlock: they start against the schema the
