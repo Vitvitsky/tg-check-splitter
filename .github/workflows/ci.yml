@@ -89,6 +89,9 @@ jobs:
               line.strip()
               for line in (body.group(1) if body else "").splitlines()
               if line.strip() and not line.strip().startswith("#")
+              # script.py.mako всегда пишет однострочный докстринг перед телом
+              # ("""Upgrade schema."""), даже когда upgrade() — это просто pass.
+              and not re.match(r'^""".*"""$', line.strip())
           ]
           if lines != ["pass"]:
               print("::error::autogenerate дал непустую миграцию — модели и схема разъехались")
