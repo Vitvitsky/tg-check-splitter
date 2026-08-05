@@ -1,5 +1,7 @@
 # Check Splitter Bot
 
+[![CI](https://github.com/Vitvitsky/tg-check-splitter/actions/workflows/ci.yml/badge.svg)](https://github.com/Vitvitsky/tg-check-splitter/actions/workflows/ci.yml)
+
 Telegram-бот + Mini App для разделения ресторанного счёта между участниками.
 
 ## Как это работает
