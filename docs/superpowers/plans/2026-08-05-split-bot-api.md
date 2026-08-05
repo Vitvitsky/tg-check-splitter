@@ -61,7 +61,7 @@
 - Create: `core/__init__.py`
 - Move: `bot/config.py`, `bot/db.py`, `bot/utils.py`, `bot/models/`, `bot/services/` → `core/`
 - Modify: `api/**/*.py`, `bot/**/*.py`, `tests/**/*.py`, `alembic/env.py`, `Dockerfile`
-- Test: весь существующий набор (226 тестов), новых тестов не пишем
+- Test: весь существующий набор (187 тестов), новых тестов не пишем
 
 **Interfaces:**
 - Consumes: ничего (первая задача).
@@ -121,7 +121,7 @@ git add core/__init__.py
 Переезжают ровно пять имён. Оставшиеся (`bot.handlers`, `bot.keyboards`, `bot.i18n`, `bot.middlewares`) под шаблон не попадают, поэтому замена безопасна:
 
 ```bash
-grep -rlE 'bot\.(config|db|utils|models|services)' api bot tests alembic --include='*.py' \
+grep -rlE 'bot\.(config|db|utils|models|services)' api bot core tests alembic --include='*.py' \
   | xargs sed -i -E 's/\bbot\.(config|db|utils|models|services)\b/core.\1/g'
 ```
 
@@ -136,7 +136,7 @@ grep -n "^from" alembic/env.py
 - [ ] **Шаг 7: Убедиться, что живых ссылок на переехавшие модули не осталось**
 
 ```bash
-grep -rnE '\bbot\.(config|db|utils|models|services)\b' api bot tests alembic --include='*.py' \
+grep -rnE '\bbot\.(config|db|utils|models|services)\b' api bot core tests alembic --include='*.py' \
   && echo "ОСТАЛИСЬ ССЫЛКИ — чинить" || echo "чисто"
 ```
 
