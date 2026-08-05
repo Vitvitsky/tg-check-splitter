@@ -14,6 +14,3 @@ export function currencySymbol(code: string): string {
 export function formatMoney(amount: number, currency: string): string {
   return `${amount.toLocaleString("ru-RU")} ${currencySymbol(currency)}`;
 }
-
-
-export const ciTypeError: number = "строка вместо числа";
